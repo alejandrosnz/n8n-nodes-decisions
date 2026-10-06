@@ -84,7 +84,8 @@ carry the node's light and dark icons.
    provider, `https://openrouter.ai/api/v1` for the `openrouter` provider,
    and the custom base URL for the `custom` provider. Surrounding whitespace
    and trailing slashes MUST be ignored. A `custom` provider without a base
-   URL is an error.
+   URL is an error. A non-blank base URL MUST be a valid URL using `https`,
+   except `http` on localhost for local development.
 3. No secret may be hardcoded anywhere in the package.
 
 ### 3.2 Behaviour
@@ -94,7 +95,8 @@ carry the node's light and dark icons.
 2. The effective host is the base URL when it holds a non-blank value,
    otherwise the default above. Surrounding whitespace and trailing slashes
    MUST be ignored.
-3. The credential MUST offer a test that issues `GET {host}/v1/models` and
+3. The credential MUST offer a test that issues `GET {host}/v1/models`
+   (`GET {host}/models` for the `openrouter` provider) and
    reports success or failure to the user.
 4. The API key MUST be sent only to the effective host. A response that
    redirects to another host MUST NOT receive it.
@@ -187,9 +189,11 @@ Required, both operations. A plain text model ID, for example `jev-latest`.
 
 Optional, both operations, default blank. Blank means the provider default:
 `/v1/systemone` for TypeSafe AI and custom providers,
-`/api/alpha/decisions` for OpenRouter. A non-blank value is used as written.
+`/api/alpha/decisions` for OpenRouter. A non-blank value MUST be a plain
+path: a leading slash is added when missing, duplicate slashes are collapsed,
+and absolute URLs, `.`/`..` segments, queries and fragments are errors.
 
-### 5.3 State
+### 5.4 State
 
 **State Format** — required, both operations, default **Text**.
 
@@ -210,7 +214,7 @@ object. The value MUST parse to an object or array.
 Both state fields carry the same label. Only one is ever visible, so the user
 always sees a single field called **State**.
 
-### 5.4 Questions — Evaluate only
+### 5.5 Questions — Evaluate only
 
 **Questions Format** — required, default **Using Fields Below**.
 
@@ -276,7 +280,7 @@ confidence for one.
 a single worked example. It carries the same label as the list above; only one
 is ever visible.
 
-### 5.5 Routes — Route only
+### 5.6 Routes — Route only
 
 A route is decided by one question, of any of the three types.
 
@@ -321,7 +325,7 @@ the workflow runs.
 A route is a Choice option, so by §5 rule 3 its fields carry the same labels as
 an option's.
 
-### 5.6 Options
+### 5.7 Options
 
 A collection, shown for both operations unless noted.
 
@@ -339,7 +343,8 @@ There MUST NOT be an option for renaming the output field. See §8.4.
 
 One request per input item, to `POST {host}{endpoint path}`, carrying exactly
 `state`, `model` and `questions`. The endpoint path is §5.3: the provider
-default when **Endpoint Path** is blank, otherwise the entered path.
+default when **Endpoint Path** is blank, otherwise the entered path as
+normalized there.
 
 ### 6.1 Questions for Evaluate
 
