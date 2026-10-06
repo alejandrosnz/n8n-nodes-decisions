@@ -19,6 +19,7 @@ export interface DecisionsCredentials {
 	provider?: unknown;
 	apiKey?: unknown;
 	baseUrl?: unknown;
+	endpointPath?: unknown;
 }
 
 /** Limits the API itself imposes on a question's criteria */
@@ -85,7 +86,8 @@ export function resolveBaseUrl(credentials: DecisionsCredentials = {}): string {
 }
 
 /** Empty means the default for the provider: Decisions path on OpenRouter, SystemOne otherwise. */
-export function resolveEndpointPath(providerRaw: unknown, raw: unknown): string {
+export function resolveEndpointPath(credentials: DecisionsCredentials = {}): string {
+	const raw = credentials.endpointPath;
 	if (typeof raw === 'string' && raw.trim() !== '') {
 		const path = raw.trim();
 		if (path.includes('://') || path.includes('\\')) {
@@ -101,7 +103,7 @@ export function resolveEndpointPath(providerRaw: unknown, raw: unknown): string 
 		}
 		return `/${segments.join('/')}`;
 	}
-	return normalizeProvider(providerRaw) === 'openrouter'
+	return normalizeProvider(credentials.provider) === 'openrouter'
 		? DEFAULT_DECISIONS_PATH
 		: DEFAULT_SYSTEMONE_PATH;
 }
@@ -201,14 +203,13 @@ export async function evaluateState(
 	itemIndex: number,
 	body: IDataObject,
 	timeout: number,
-	endpointPath?: unknown,
 ): Promise<DecisionsResponse> {
 	const credentials = (await context.getCredentials(CREDENTIAL_NAME)) as DecisionsCredentials;
 	const response = await apiRequest(
 		context,
 		{
 			method: 'POST',
-			path: resolveEndpointPath(credentials.provider, endpointPath),
+			path: resolveEndpointPath(credentials),
 			body,
 			timeout,
 		},

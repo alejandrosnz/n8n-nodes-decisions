@@ -274,7 +274,6 @@ export class Decisions implements INodeType {
 					questions: buildQuestions(this, context, operation),
 				} as IDataObject,
 				this.getNodeParameter('options.timeout', itemIndex, 5000) as number,
-				this.getNodeParameter('endpointPath', itemIndex, '') as string,
 			);
 
 			if (!isRoute) {

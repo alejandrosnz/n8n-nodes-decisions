@@ -18,7 +18,7 @@ Fork of `@typesafe-ai/n8n-nodes-typesafe-ai` as `n8n-nodes-decisions`.
 - **Decisions API credential** with `typesafe`, `openrouter` and `custom`
   providers, following the multi-provider pattern of
   `n8n-nodes-universal-llm-vision`.
-- **Configurable endpoint path.** Empty means the provider default:
+- **Endpoint path in the credential.** Empty means the provider default:
   `/v1/systemone` for TypeSafe AI and custom, `/api/alpha/decisions` for
   OpenRouter.
 - **Model as plain text.** The model ID is a simple string input.

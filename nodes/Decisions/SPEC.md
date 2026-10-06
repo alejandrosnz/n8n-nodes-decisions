@@ -78,6 +78,7 @@ carry the node's light and dark icons.
 | Provider | yes | yes | `typesafe` | `typesafe`, `openrouter` or `custom` |
 | API Key | yes, masked | yes | — | Bearer token for the API |
 | Base URL | only for `custom` | for `custom` | — | Host the node calls for a custom provider |
+| Endpoint Path | yes | no | blank | Path the node calls; blank means the provider default |
 
 1. The API key MUST be stored and displayed as a password field.
 2. The effective host is `https://api.typesafe.ai` for the `typesafe`
@@ -86,7 +87,13 @@ carry the node's light and dark icons.
    and trailing slashes MUST be ignored. A `custom` provider without a base
    URL is an error. A non-blank base URL MUST be a valid URL using `https`,
    except `http` on localhost for local development.
-3. No secret may be hardcoded anywhere in the package.
+3. The effective path is **Endpoint Path** when non-blank, otherwise the
+   provider default: `/v1/systemone` for TypeSafe AI and custom providers,
+   `/api/alpha/decisions` for OpenRouter. A non-blank value MUST be a plain
+   path: a leading slash is added when missing, duplicate slashes are
+   collapsed, and absolute URLs, `.`/`..` segments, queries and fragments are
+   errors.
+4. No secret may be hardcoded anywhere in the package.
 
 ### 3.2 Behaviour
 
@@ -151,8 +158,10 @@ the node panel and search. This node is an ordinary transform node.
 Fields are identified by the label the user sees.
 
 1. A field MUST be shown only for the operations listed against it.
-   **Operation**, **Model**, **Endpoint Path**, **State Format**, **State** and **Options** are
+   **Operation**, **Model**, **State Format**, **State** and **Options** are
    shown for both operations.
+2. **Model** MUST appear directly after **Operation**, before **State Format**,
+   as a top-level field and not inside **Options**.
 2. Fields within a list entry are displayed in the order the entry declares
    them. That order MUST read as the user fills the entry in: first the field
    that decides what the rest of the entry looks like, then the field
@@ -185,15 +194,7 @@ offered there.
 
 Required, both operations. A plain text model ID, for example `jev-latest`.
 
-### 5.3 Endpoint Path
-
-Optional, both operations, default blank. Blank means the provider default:
-`/v1/systemone` for TypeSafe AI and custom providers,
-`/api/alpha/decisions` for OpenRouter. A non-blank value MUST be a plain
-path: a leading slash is added when missing, duplicate slashes are collapsed,
-and absolute URLs, `.`/`..` segments, queries and fragments are errors.
-
-### 5.4 State
+### 5.3 State
 
 **State Format** — required, both operations, default **Text**.
 
@@ -214,7 +215,7 @@ object. The value MUST parse to an object or array.
 Both state fields carry the same label. Only one is ever visible, so the user
 always sees a single field called **State**.
 
-### 5.5 Questions — Evaluate only
+### 5.4 Questions — Evaluate only
 
 **Questions Format** — required, default **Using Fields Below**.
 
@@ -280,7 +281,7 @@ confidence for one.
 a single worked example. It carries the same label as the list above; only one
 is ever visible.
 
-### 5.6 Routes — Route only
+### 5.5 Routes — Route only
 
 A route is decided by one question, of any of the three types.
 
@@ -315,7 +316,7 @@ Each **Routes** entry is titled by its **Name**:
 | Description | no | The criteria for choosing this route. |
 
 Each **Levels** entry is titled and filled in exactly as a Score question's
-levels in §5.4.
+levels in §5.3.
 
 A route's **Name**, a level's **Level**, the **Question Type**, both meanings
 and both thresholds MUST NOT be settable by expression. Between them they decide how many outputs
@@ -325,7 +326,7 @@ the workflow runs.
 A route is a Choice option, so by §5 rule 3 its fields carry the same labels as
 an option's.
 
-### 5.7 Options
+### 5.6 Options
 
 A collection, shown for both operations unless noted.
 
@@ -342,9 +343,9 @@ There MUST NOT be an option for renaming the output field. See §8.4.
 ## 6. Request
 
 One request per input item, to `POST {host}{endpoint path}`, carrying exactly
-`state`, `model` and `questions`. The endpoint path is §5.3: the provider
-default when **Endpoint Path** is blank, otherwise the entered path as
-normalized there.
+`state`, `model` and `questions`. The endpoint path is §3.1: the provider
+default when the credential's **Endpoint Path** is blank, otherwise the entered
+path as normalized there.
 
 ### 6.1 Questions for Evaluate
 

@@ -16,7 +16,6 @@ const node: INode = {
 const routeParameters: Record<string, unknown> = {
 	operation: 'route',
 	model: 'jev-latest',
-	endpointPath: '',
 	stateFormat: 'inputItem',
 	routeInstructions: 'Which department should handle this?',
 	'routes.route': [{ name: 'billing' }, { name: 'technical' }],
@@ -123,9 +122,11 @@ describe('Route', () => {
 
 	it('calls a custom endpoint path when one is given', async () => {
 		const { functions, request } = createFunctions(
-			{ ...routeParameters, endpointPath: '/custom/decisions' },
+			routeParameters,
 			items,
 			() => choiceResponse('billing', 0.9),
+			false,
+			{ provider: 'typesafe', apiKey: 'k', endpointPath: '/custom/decisions' },
 		);
 		await Decisions.prototype.execute.call(functions);
 

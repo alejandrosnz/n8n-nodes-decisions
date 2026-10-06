@@ -32,11 +32,15 @@ Add a **Decisions API** credential and pick a **Provider**:
 | OpenRouter | Create one in your [OpenRouter dashboard](https://openrouter.ai) | Built in (`https://openrouter.ai/api/v1`) |
 | Custom (Decisions Compatible) | Your provider key | Enter the provider base URL, e.g. `https://api.custom.com/v1` |
 
+**Endpoint Path** is optional. Leave it blank to use the default for your provider: `/v1/systemone` for TypeSafe AI and custom providers, `/api/alpha/decisions` for OpenRouter. Set a custom path only if your provider documents a different one.
+
 n8n checks the key when you save the credential.
 
 ## Operations
 
 Both operations send one request per input item. Each request includes the item's state, the **Model** ID, and the questions.
+
+**Model** is a plain text model ID, e.g. `jev-latest`. The [Models](https://docs.typesafe.ai/models) page describes TypeSafe models and their aliases. For OpenRouter or custom providers, enter the model ID your provider expects. Any OpenRouter model with the decisions output modality should work, e.g. `typesafe/jev-latest`; see the [Decisions models on OpenRouter](https://openrouter.ai/models?output_modalities=decisions).
 
 **State Format** sets where the state comes from:
 
@@ -47,10 +51,6 @@ Both operations send one request per input item. Each request includes the item'
 | Input Item | The incoming item's JSON |
 
 All the questions in a request are asked about the same state. The [State](https://docs.typesafe.ai/concepts/state) page covers how to structure it.
-
-**Model** is a plain text model ID, e.g. `jev-latest`. The [Models](https://docs.typesafe.ai/models) page describes TypeSafe models and their aliases. For OpenRouter or custom providers, enter the model ID your provider expects.
-
-**Endpoint Path** is optional. Leave it blank to use the default for your provider: `/v1/systemone` for TypeSafe AI and custom providers, `/api/alpha/decisions` for OpenRouter. Enter a custom path only if your provider documents a different one.
 
 ### Evaluate
 

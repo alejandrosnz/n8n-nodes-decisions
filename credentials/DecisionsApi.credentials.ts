@@ -55,6 +55,15 @@ export class DecisionsApi implements ICredentialType {
 				'The base URL of your Decisions-compatible API. Obtain it from your provider documentation.',
 			displayOptions: { show: { provider: ['custom'] } },
 		},
+		{
+			displayName: 'Endpoint Path',
+			name: 'endpointPath',
+			type: 'string',
+			default: '',
+			placeholder: 'e.g. /api/alpha/decisions',
+			description:
+				"Leave blank to use the default for your provider: '/v1/systemone' for TypeSafe AI and custom, '/api/alpha/decisions' for OpenRouter",
+		},
 	];
 
 	authenticate: IAuthenticateGeneric = {

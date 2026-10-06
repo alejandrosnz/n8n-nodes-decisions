@@ -223,15 +223,6 @@ export const decisionsProperties: INodeProperties[] = [
 		description: 'The model ID to evaluate with, e.g. jev-latest',
 	},
 	{
-		displayName: 'Endpoint Path',
-		name: 'endpointPath',
-		type: 'string',
-		default: '',
-		placeholder: 'e.g. /api/alpha/decisions',
-		description:
-			"Leave blank to use the default for your provider: '/v1/systemone' for TypeSafe AI and custom, '/api/alpha/decisions' for OpenRouter",
-	},
-	{
 		displayName: 'State Format',
 		name: 'stateFormat',
 		type: 'options',

@@ -52,22 +52,34 @@ describe('resolveBaseUrl', () => {
 
 describe('resolveEndpointPath', () => {
 	it('uses the SystemOne path by default for TypeSafe AI and custom providers', () => {
-		expect(resolveEndpointPath('typesafe', '')).toBe(DEFAULT_SYSTEMONE_PATH);
-		expect(resolveEndpointPath('custom', undefined)).toBe(DEFAULT_SYSTEMONE_PATH);
-		expect(resolveEndpointPath(undefined, '')).toBe(DEFAULT_SYSTEMONE_PATH);
+		expect(resolveEndpointPath({ provider: 'typesafe', endpointPath: '' })).toBe(
+			DEFAULT_SYSTEMONE_PATH,
+		);
+		expect(resolveEndpointPath({ provider: 'custom', endpointPath: undefined })).toBe(
+			DEFAULT_SYSTEMONE_PATH,
+		);
+		expect(resolveEndpointPath({})).toBe(DEFAULT_SYSTEMONE_PATH);
 	});
 
 	it('uses the Decisions path by default for OpenRouter', () => {
-		expect(resolveEndpointPath('openrouter', '')).toBe(DEFAULT_DECISIONS_PATH);
+		expect(resolveEndpointPath({ provider: 'openrouter', endpointPath: '' })).toBe(
+			DEFAULT_DECISIONS_PATH,
+		);
 	});
 
 	it('uses a custom path when one is given', () => {
-		expect(resolveEndpointPath('openrouter', 'custom/path')).toBe('/custom/path');
-		expect(resolveEndpointPath('typesafe', '/api/alpha/decisions')).toBe('/api/alpha/decisions');
+		expect(
+			resolveEndpointPath({ provider: 'openrouter', endpointPath: 'custom/path' }),
+		).toBe('/custom/path');
+		expect(
+			resolveEndpointPath({ provider: 'typesafe', endpointPath: '/api/alpha/decisions' }),
+		).toBe('/api/alpha/decisions');
 	});
 
 	it('collapses duplicate slashes so the host cannot change', () => {
-		expect(resolveEndpointPath('typesafe', '//evil.com/x')).toBe('/evil.com/x');
+		expect(resolveEndpointPath({ provider: 'typesafe', endpointPath: '//evil.com/x' })).toBe(
+			'/evil.com/x',
+		);
 	});
 
 	it.each([
@@ -80,7 +92,9 @@ describe('resolveEndpointPath', () => {
 		'\\windows\\path',
 		'/',
 	])('rejects a hostile endpoint path %s', (path) => {
-		expect(() => resolveEndpointPath('typesafe', path)).toThrow(/'Endpoint Path'/);
+		expect(() => resolveEndpointPath({ provider: 'typesafe', endpointPath: path })).toThrow(
+			/'Endpoint Path'/,
+		);
 	});
 });
 
