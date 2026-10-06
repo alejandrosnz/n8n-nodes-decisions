@@ -117,7 +117,7 @@ describe('Route', () => {
 		await Decisions.prototype.execute.call(functions);
 
 		const [, options] = request.mock.calls[0] as unknown as [unknown, { url: string }];
-		expect(options.url).toBe('https://openrouter.ai/api/v1/api/alpha/decisions');
+		expect(options.url).toBe('https://openrouter.ai/api/alpha/decisions');
 	});
 
 	it('calls a custom endpoint path when one is given', async () => {

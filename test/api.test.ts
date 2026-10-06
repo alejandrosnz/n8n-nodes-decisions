@@ -17,8 +17,8 @@ describe('resolveBaseUrl', () => {
 		[{ provider: 'typesafe' }, 'https://api.typesafe.ai'],
 		[{ provider: 'typesafe', baseUrl: '' }, 'https://api.typesafe.ai'],
 		[{ provider: 'typesafe', baseUrl: '  https://eu.example.com///  ' }, 'https://eu.example.com'],
-		[{ provider: 'openrouter' }, 'https://openrouter.ai/api/v1'],
-		[{ provider: 'openrouter', baseUrl: '' }, 'https://openrouter.ai/api/v1'],
+		[{ provider: 'openrouter' }, 'https://openrouter.ai'],
+		[{ provider: 'openrouter', baseUrl: '' }, 'https://openrouter.ai'],
 		[{ provider: 'custom', baseUrl: 'https://api.custom.com/v1/' }, 'https://api.custom.com/v1'],
 	])('resolves %j', (credentials, expected) => {
 		expect(resolveBaseUrl(credentials)).toBe(expected);

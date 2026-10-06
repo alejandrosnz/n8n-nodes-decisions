@@ -29,7 +29,7 @@ Add a **Decisions API** credential and pick a **Provider**:
 | Provider | API Key | Base URL |
 | --- | --- | --- |
 | TypeSafe AI | Create one in the [TypeSafe console](https://console.typesafe.ai/keys) | Built in (`https://api.typesafe.ai`) |
-| OpenRouter | Create one in your [OpenRouter dashboard](https://openrouter.ai) | Built in (`https://openrouter.ai/api/v1`) |
+| OpenRouter | Create one in your [OpenRouter dashboard](https://openrouter.ai) | Built in (`https://openrouter.ai`) |
 | Custom (Decisions Compatible) | Your provider key | Enter the provider base URL, e.g. `https://api.custom.com/v1` |
 
 **Endpoint Path** is optional. Leave it blank to use the default for your provider: `/v1/systemone` for TypeSafe AI and custom providers, `/api/alpha/decisions` for OpenRouter. Set a custom path only if your provider documents a different one.
