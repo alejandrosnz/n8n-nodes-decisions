@@ -13,7 +13,7 @@ This directory contains the GitHub Actions workflows for the n8n community node 
 - Pushes to `master` branch
 
 **What it does**:
-1. Sets up Node.js (20.19, 22.x, 24.x) - matching n8n compatibility
+1. Sets up Node.js (22.x, 24.x) - matching n8n compatibility
 2. Installs dependencies
 3. Runs ESLint for code linting
 4. Runs type checking (if available)
@@ -161,12 +161,12 @@ If you need precise semantic versioning, consider using `release-it` directly in
 ### Tests fail in CI but pass locally
 
 **Possible causes**:
-- Different Node.js versions (CI tests on 20.19, 22.x, and 24.x)
+- Different Node.js versions (CI tests on 22.x and 24.x)
 - Missing dependencies (check if all dev dependencies are in package.json)
 - Environment-specific issues
 
 **Solutions**:
-- Test locally with the same Node version: `nvm use 20.19` or `nvm use 22`
+- Test locally with the same Node version: `nvm use 22` or `nvm use 24`
 - Run `npm ci` instead of `npm install` to match CI behavior
 - Check CI logs for specific error messages
 
