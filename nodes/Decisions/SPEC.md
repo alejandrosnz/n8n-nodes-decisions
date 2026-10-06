@@ -82,7 +82,7 @@ carry the node's light and dark icons.
 
 1. The API key MUST be stored and displayed as a password field.
 2. The effective host is `https://api.typesafe.ai` for the `typesafe`
-   provider, `https://openrouter.ai/api/v1` for the `openrouter` provider,
+   provider, `https://openrouter.ai` for the `openrouter` provider,
    and the custom base URL for the `custom` provider. Surrounding whitespace
    and trailing slashes MUST be ignored. A `custom` provider without a base
    URL is an error. A non-blank base URL MUST be a valid URL using `https`,
@@ -103,7 +103,7 @@ carry the node's light and dark icons.
    otherwise the default above. Surrounding whitespace and trailing slashes
    MUST be ignored.
 3. The credential MUST offer a test that issues `GET {host}/v1/models`
-   (`GET {host}/models` for the `openrouter` provider) and
+   (`GET {host}/api/v1/models` for the `openrouter` provider) and
    reports success or failure to the user.
 4. The API key MUST be sent only to the effective host. A response that
    redirects to another host MUST NOT receive it.

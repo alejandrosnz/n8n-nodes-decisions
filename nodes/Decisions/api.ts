@@ -8,7 +8,7 @@ import { NodeApiError } from 'n8n-workflow';
 
 export const CREDENTIAL_NAME = 'decisionsApi';
 export const DEFAULT_BASE_URL = 'https://api.typesafe.ai';
-export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+export const OPENROUTER_BASE_URL = 'https://openrouter.ai';
 
 export const DEFAULT_SYSTEMONE_PATH = '/v1/systemone';
 export const DEFAULT_DECISIONS_PATH = '/api/alpha/decisions';
