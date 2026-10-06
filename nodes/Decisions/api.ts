@@ -36,25 +36,50 @@ function stripTrailingSlashes(value: string): string {
 	return value.replace(/\/+$/, '');
 }
 
+function isLocalhost(hostname: string): boolean {
+	return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+function parseBaseUrl(stripped: string): URL | null {
+	try {
+		return new URL(stripped);
+	} catch {
+		return null;
+	}
+}
+
+/** A base URL must be an https URL, except for local development over http on localhost. */
+function normalizeBaseUrl(raw: unknown): string {
+	const trimmed = typeof raw === 'string' ? raw.trim() : '';
+	if (trimmed === '') {
+		throw new Error("'Base URL' is empty. Set the base URL of your custom provider.");
+	}
+	const stripped = stripTrailingSlashes(trimmed);
+	const parsed = parseBaseUrl(stripped);
+	if (parsed === null) {
+		throw new Error("'Base URL' is not a valid URL. Use an https URL such as https://api.custom.com/v1.");
+	}
+	if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocalhost(parsed.hostname))) {
+		throw new Error("'Base URL' must use https. Use an https URL such as https://api.custom.com/v1.");
+	}
+	return stripped;
+}
+
 export function resolveBaseUrl(credentials: DecisionsCredentials = {}): string {
 	const provider = normalizeProvider(credentials.provider);
 	if (provider === 'openrouter') {
 		const custom = typeof credentials.baseUrl === 'string' ? credentials.baseUrl.trim() : '';
 		if (custom !== '') {
-			return stripTrailingSlashes(custom);
+			return normalizeBaseUrl(custom);
 		}
 		return OPENROUTER_BASE_URL;
 	}
 	if (provider === 'custom') {
-		const custom = typeof credentials.baseUrl === 'string' ? credentials.baseUrl.trim() : '';
-		if (custom === '') {
-			throw new Error("'Base URL' is empty. Set the base URL of your custom provider.");
-		}
-		return stripTrailingSlashes(custom);
+		return normalizeBaseUrl(credentials.baseUrl);
 	}
 	const custom = typeof credentials.baseUrl === 'string' ? credentials.baseUrl.trim() : '';
 	if (custom !== '') {
-		return stripTrailingSlashes(custom);
+		return normalizeBaseUrl(custom);
 	}
 	return DEFAULT_BASE_URL;
 }
@@ -63,7 +88,18 @@ export function resolveBaseUrl(credentials: DecisionsCredentials = {}): string {
 export function resolveEndpointPath(providerRaw: unknown, raw: unknown): string {
 	if (typeof raw === 'string' && raw.trim() !== '') {
 		const path = raw.trim();
-		return path.startsWith('/') ? path : `/${path}`;
+		if (path.includes('://') || path.includes('\\')) {
+			throw new Error("'Endpoint Path' must be a path such as /v1/systemone, not a URL.");
+		}
+		const normalized = path.startsWith('/') ? path : `/${path}`;
+		if (normalized.includes('?') || normalized.includes('#')) {
+			throw new Error("'Endpoint Path' must be a path such as /v1/systemone, without query or fragment.");
+		}
+		const segments = normalized.split('/').filter((segment) => segment !== '');
+		if (segments.length === 0 || segments.includes('..') || segments.includes('.')) {
+			throw new Error("'Endpoint Path' must be a path such as /v1/systemone.");
+		}
+		return `/${segments.join('/')}`;
 	}
 	return normalizeProvider(providerRaw) === 'openrouter'
 		? DEFAULT_DECISIONS_PATH

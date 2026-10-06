@@ -69,7 +69,7 @@ export class DecisionsApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			baseURL: BASE_URL_EXPRESSION,
-			url: '/v1/models',
+			url: "={{ $credentials.provider === 'openrouter' ? '/models' : '/v1/models' }}",
 			method: 'GET',
 		},
 	};

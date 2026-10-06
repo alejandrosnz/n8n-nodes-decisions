@@ -27,6 +27,27 @@ describe('resolveBaseUrl', () => {
 	it('rejects a custom provider without a base URL', () => {
 		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: '  ' })).toThrow(/'Base URL' is empty/);
 	});
+
+	it('rejects non-https base URLs', () => {
+		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: 'http://api.custom.com/v1' })).toThrow(
+			/must use https/,
+		);
+		expect(() => resolveBaseUrl({ provider: 'typesafe', baseUrl: 'http://eu.example.com' })).toThrow(
+			/must use https/,
+		);
+	});
+
+	it('rejects base URLs that are not valid URLs', () => {
+		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: 'not a url' })).toThrow(
+			/not a valid URL/,
+		);
+	});
+
+	it('allows http for local development', () => {
+		expect(resolveBaseUrl({ provider: 'custom', baseUrl: 'http://localhost:3000/v1/' })).toBe(
+			'http://localhost:3000/v1',
+		);
+	});
 });
 
 describe('resolveEndpointPath', () => {
@@ -43,6 +64,23 @@ describe('resolveEndpointPath', () => {
 	it('uses a custom path when one is given', () => {
 		expect(resolveEndpointPath('openrouter', 'custom/path')).toBe('/custom/path');
 		expect(resolveEndpointPath('typesafe', '/api/alpha/decisions')).toBe('/api/alpha/decisions');
+	});
+
+	it('collapses duplicate slashes so the host cannot change', () => {
+		expect(resolveEndpointPath('typesafe', '//evil.com/x')).toBe('/evil.com/x');
+	});
+
+	it.each([
+		'https://evil.com/x',
+		'http://evil.com/x',
+		'/a/../b',
+		'/a/./b',
+		'/path?query=1',
+		'/path#fragment',
+		'\\windows\\path',
+		'/',
+	])('rejects a hostile endpoint path %s', (path) => {
+		expect(() => resolveEndpointPath('typesafe', path)).toThrow(/'Endpoint Path'/);
 	});
 });
 

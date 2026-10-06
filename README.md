@@ -146,6 +146,8 @@ To keep the workflow running when an item fails, set **On Error**:
 
 Tested with n8n 2.40.
 
+This package is a fork of `typesafe-ai/n8n-nodes-typesafe-ai`, renamed to `n8n-nodes-decisions` with the node `decisions` and the credential `decisionsApi`. It is not a drop-in upgrade: workflows built with the TypeSafe AI node need the node and credential replaced.
+
 ## Resources
 
 * [TypeSafe AI quickstart](https://docs.typesafe.ai/introduction/quickstart)

@@ -1,5 +1,6 @@
 MIT License
 
+Copyright (c) 2026 TypeSafe AI
 Copyright (c) 2026 Alejandro Sanz
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
