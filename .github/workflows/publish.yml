@@ -1,4 +1,4 @@
-# Publishes the package to npm, with a provenance statement, when a version
+﻿# Publishes the package to npm, with a provenance statement, when a version
 # tag is pushed. The build job has read-only access; the publish job holds the
 # publish rights and only publishes the tarball the build job packed.
 

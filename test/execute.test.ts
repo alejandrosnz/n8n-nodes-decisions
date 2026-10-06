@@ -2,12 +2,12 @@ import type { IExecuteFunctions, INode, INodeExecutionData } from 'n8n-workflow'
 import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TypeSafeAi } from '../nodes/TypeSafeAi/TypeSafeAi.node';
+import { Decisions } from '../nodes/Decisions/Decisions.node';
 
 const node: INode = {
 	id: 'a',
-	name: 'TypeSafe AI',
-	type: 'typeSafeAi',
+	name: 'Decisions',
+	type: 'decisions',
 	typeVersion: 1,
 	position: [0, 0],
 	parameters: {},
@@ -15,7 +15,7 @@ const node: INode = {
 
 const routeParameters: Record<string, unknown> = {
 	operation: 'route',
-	model: { mode: 'list', value: 'jev-latest', cachedResultName: 'jev-latest' },
+	model: 'jev-latest',
 	stateFormat: 'inputItem',
 	routeInstructions: 'Which department should handle this?',
 	'routes.route': [{ name: 'billing' }, { name: 'technical' }],
@@ -46,6 +46,7 @@ function createFunctions(
 	items: INodeExecutionData[],
 	respond: (body: unknown) => unknown,
 	continueOnFail = false,
+	credentials: Record<string, unknown> = { provider: 'typesafe', apiKey: 'k', baseUrl: '' },
 ) {
 	const request = vi.fn(async () => respond(undefined));
 	return {
@@ -54,18 +55,9 @@ function createFunctions(
 			getInputData: () => items,
 			getNode: () => node,
 			continueOnFail: () => continueOnFail,
-			getCredentials: async () => ({ apiKey: 'k', baseUrl: '' }),
-			getNodeParameter: (
-				name: string,
-				_itemIndex: number,
-				fallback?: unknown,
-				options?: { extractValue?: boolean },
-			) => {
-				const value = name in parameters ? parameters[name] : fallback;
-				if (options?.extractValue === true && typeof value === 'object' && value !== null) {
-					return (value as { value: unknown }).value;
-				}
-				return value;
+			getCredentials: async () => credentials,
+			getNodeParameter: (name: string, _itemIndex: number, fallback?: unknown) => {
+				return name in parameters ? parameters[name] : fallback;
 			},
 			helpers: { httpRequestWithAuthentication: request },
 		} as unknown as IExecuteFunctions,
@@ -79,7 +71,7 @@ describe('Route', () => {
 		const { functions, request } = createFunctions(routeParameters, items, () =>
 			choiceResponse('technical', 0.9),
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs).toHaveLength(3);
 		expect(outputs[0]).toHaveLength(0);
@@ -104,11 +96,49 @@ describe('Route', () => {
 		});
 	});
 
+	it('calls the SystemOne path by default for TypeSafe AI', async () => {
+		const { functions, request } = createFunctions(routeParameters, items, () =>
+			choiceResponse('billing', 0.9),
+		);
+		await Decisions.prototype.execute.call(functions);
+
+		const [, options] = request.mock.calls[0] as unknown as [unknown, { url: string }];
+		expect(options.url).toBe('https://api.typesafe.ai/v1/systemone');
+	});
+
+	it('calls the Decisions path by default for OpenRouter', async () => {
+		const { functions, request } = createFunctions(
+			routeParameters,
+			items,
+			() => choiceResponse('billing', 0.9),
+			false,
+			{ provider: 'openrouter', apiKey: 'k' },
+		);
+		await Decisions.prototype.execute.call(functions);
+
+		const [, options] = request.mock.calls[0] as unknown as [unknown, { url: string }];
+		expect(options.url).toBe('https://openrouter.ai/api/v1/api/alpha/decisions');
+	});
+
+	it('calls a custom endpoint path when one is given', async () => {
+		const { functions, request } = createFunctions(
+			routeParameters,
+			items,
+			() => choiceResponse('billing', 0.9),
+			false,
+			{ provider: 'typesafe', apiKey: 'k', endpointPath: '/custom/decisions' },
+		);
+		await Decisions.prototype.execute.call(functions);
+
+		const [, options] = request.mock.calls[0] as unknown as [unknown, { url: string }];
+		expect(options.url).toBe('https://api.typesafe.ai/custom/decisions');
+	});
+
 	it('sends an unsure item to the Fallback output', async () => {
 		const { functions } = createFunctions(routeParameters, items, () =>
 			choiceResponse('billing', 0.4),
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[0]).toHaveLength(0);
 		expect(outputs[2][0].json.route).toEqual({ choice: 'billing', confidence: 0.4 });
@@ -120,7 +150,7 @@ describe('Route', () => {
 			items,
 			() => choiceResponse('billing', 0.4),
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs).toHaveLength(2);
 		expect(outputs[0][0].json.route).toEqual({ choice: 'billing', confidence: 0.4 });
@@ -132,7 +162,7 @@ describe('Route errors with Continue On Fail', () => {
 
 	it('sends a failing item to the Fallback, not to the first route', async () => {
 		const { functions } = createFunctions(routeParameters, items, failure, true);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[0]).toHaveLength(0);
 		expect(outputs[1]).toHaveLength(0);
@@ -146,7 +176,7 @@ describe('Route errors with Continue On Fail', () => {
 			failure,
 			true,
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs).toHaveLength(2);
 		expect(outputs[0][0].json).toMatchObject({ ticket: 1, error: 'Server exploded' });
@@ -154,7 +184,7 @@ describe('Route errors with Continue On Fail', () => {
 
 	it('attaches the API error to the item, for the error output', async () => {
 		const { functions } = createFunctions(routeParameters, items, failure, true);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[2][0].error).toBeInstanceOf(NodeApiError);
 		expect(outputs[2][0].error?.message).toBe('Server exploded');
@@ -167,7 +197,7 @@ describe('Route errors with Continue On Fail', () => {
 			() => choiceResponse('sales', 0.9),
 			true,
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[2][0].error).toBeInstanceOf(NodeOperationError);
 		expect(outputs[2][0].json.error).toMatch(/not one of the configured routes/);
@@ -182,7 +212,7 @@ describe('Route errors with Continue On Fail', () => {
 			},
 			true,
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[2][0].error).toBeInstanceOf(NodeOperationError);
 		expect(outputs[2][0].json.error).toBe('timeout of 5000ms exceeded');
@@ -195,7 +225,7 @@ describe('Route errors with Continue On Fail', () => {
 			failure,
 			true,
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[2][0].json).toEqual({ error: 'Server exploded' });
 	});
@@ -205,7 +235,7 @@ describe('Route by Noul', () => {
 	const noulParameters: Record<string, unknown> = {
 		operation: 'route',
 		routeQuestionType: 'noul',
-		model: { mode: 'list', value: 'jev-latest', cachedResultName: 'jev-latest' },
+		model: 'jev-latest',
 		stateFormat: 'inputItem',
 		routeInstructions: 'Is this ticket urgent?',
 		routeTrueMeans: 'Needs a reply today',
@@ -230,7 +260,7 @@ describe('Route by Noul', () => {
 			noulResponse(noul),
 			continueOnFail,
 		);
-		return { outputs: await TypeSafeAi.prototype.execute.call(functions), request };
+		return { outputs: await Decisions.prototype.execute.call(functions), request };
 	}
 
 	it('asks a noul question carrying both meanings', async () => {
@@ -312,7 +342,7 @@ describe('Route by Noul', () => {
 			noulResponse(0.5),
 		);
 
-		await expect(TypeSafeAi.prototype.execute.call(functions)).rejects.toThrow(
+		await expect(Decisions.prototype.execute.call(functions)).rejects.toThrow(
 			/'True Probability Threshold' \(0.3\) is below 'False Probability Threshold' \(0.7\)/,
 		);
 	});
@@ -324,7 +354,7 @@ describe('Route by Noul', () => {
 			() => ({ statusCode: 500, body: { detail: 'Server exploded' } }),
 			true,
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[0]).toHaveLength(0);
 		expect(outputs[1]).toHaveLength(0);
@@ -336,7 +366,7 @@ describe('Route by Score', () => {
 	const scoreParameters: Record<string, unknown> = {
 		operation: 'route',
 		routeQuestionType: 'score',
-		model: { mode: 'list', value: 'jev-latest', cachedResultName: 'jev-latest' },
+		model: 'jev-latest',
 		stateFormat: 'inputItem',
 		routeInstructions: 'How frustrated is the customer?',
 		'routeLevels.level': [{ level: 'Calm' }, { level: 'Frustrated' }, { level: 'Furious' }],
@@ -360,7 +390,7 @@ describe('Route by Score', () => {
 
 	async function route(parameters: Record<string, unknown>, score: number) {
 		const { functions, request } = createFunctions(parameters, items, scoreResponse(score));
-		return { outputs: await TypeSafeAi.prototype.execute.call(functions), request };
+		return { outputs: await Decisions.prototype.execute.call(functions), request };
 	}
 
 	it('asks a score question with the levels in order, lowest first', async () => {
@@ -432,7 +462,7 @@ describe('Route by Score', () => {
 			scoreResponse(1),
 		);
 
-		await expect(TypeSafeAi.prototype.execute.call(functions)).rejects.toThrow(
+		await expect(Decisions.prototype.execute.call(functions)).rejects.toThrow(
 			/'Levels': every level needs a description/,
 		);
 	});
@@ -444,7 +474,7 @@ describe('Route by Score', () => {
 			() => ({ statusCode: 500, body: { detail: 'Server exploded' } }),
 			true,
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs).toHaveLength(3);
 		expect(outputs[0][0].json).toMatchObject({ ticket: 1, error: 'Server exploded' });
@@ -454,7 +484,7 @@ describe('Route by Score', () => {
 describe('Evaluate', () => {
 	const evaluateParameters: Record<string, unknown> = {
 		operation: 'evaluate',
-		model: { mode: 'list', value: 'jev-latest', cachedResultName: 'jev-latest' },
+		model: 'jev-latest',
 		stateFormat: 'text',
 		stateText: 'Charged twice',
 		questionsFormat: 'fields',
@@ -472,7 +502,7 @@ describe('Evaluate', () => {
 
 	it('simplifies the answers and omits usage by default', async () => {
 		const { functions } = createFunctions(evaluateParameters, items, () => evaluateResponse);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs).toHaveLength(1);
 		expect(outputs[0][0].json).toEqual({
@@ -488,7 +518,7 @@ describe('Evaluate', () => {
 			items,
 			() => evaluateResponse,
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[0][0].json).toEqual({
 			answers: { is_urgent: { type: 'noul', noul: 0.85 } },
@@ -506,7 +536,7 @@ describe('Evaluate', () => {
 			items,
 			() => evaluateResponse,
 		);
-		await TypeSafeAi.prototype.execute.call(functions);
+		await Decisions.prototype.execute.call(functions);
 
 		const body = (request.mock.calls[0] as unknown as [unknown, { body: { state: unknown } }])[1]
 			.body;
@@ -519,7 +549,7 @@ describe('Evaluate', () => {
 			body: { detail: [{ loc: ['body', 'model'], msg: 'Field required' }] },
 		}));
 
-		await expect(TypeSafeAi.prototype.execute.call(functions)).rejects.toThrow(
+		await expect(Decisions.prototype.execute.call(functions)).rejects.toThrow(
 			/model: Field required/,
 		);
 	});
@@ -531,7 +561,7 @@ describe('Evaluate', () => {
 			() => ({ statusCode: 500, body: { detail: 'Server exploded' } }),
 			true,
 		);
-		const outputs = await TypeSafeAi.prototype.execute.call(functions);
+		const outputs = await Decisions.prototype.execute.call(functions);
 
 		expect(outputs[0][0].json).toMatchObject({ ticket: 1, error: 'Server exploded' });
 	});
@@ -542,7 +572,7 @@ describe('Request', () => {
 		const { functions, request } = createFunctions(routeParameters, items, () =>
 			choiceResponse('billing', 0.9),
 		);
-		await TypeSafeAi.prototype.execute.call(functions);
+		await Decisions.prototype.execute.call(functions);
 
 		const [, options] = request.mock.calls[0] as unknown as [
 			unknown,
@@ -553,24 +583,24 @@ describe('Request', () => {
 });
 
 describe('Model', () => {
-	const modelParameters = (model: unknown) => ({ ...routeParameters, model });
-
-	async function postedModel(model: unknown) {
-		const { functions, request } = createFunctions(modelParameters(model), items, () =>
-			choiceResponse('billing', 0.9),
+	it('sends the model ID as plain text', async () => {
+		const { functions, request } = createFunctions(
+			{ ...routeParameters, model: 'jev-1.13.0' },
+			items,
+			() => choiceResponse('billing', 0.9),
 		);
-		await TypeSafeAi.prototype.execute.call(functions);
+		await Decisions.prototype.execute.call(functions);
 		const [, options] = request.mock.calls[0] as unknown as [unknown, { body: { model: unknown } }];
-		return options.body.model;
-	}
-
-	it('sends the ID chosen from the list, not the resource locator', async () => {
-		expect(
-			await postedModel({ mode: 'list', value: 'jev-latest', cachedResultName: 'jev-latest' }),
-		).toBe('jev-latest');
+		expect(options.body.model).toBe('jev-1.13.0');
 	});
 
-	it('sends an ID entered directly', async () => {
-		expect(await postedModel({ mode: 'id', value: 'jev-1.13.0' })).toBe('jev-1.13.0');
+	it('rejects an empty model', async () => {
+		const { functions } = createFunctions(
+			{ ...routeParameters, model: '  ' },
+			items,
+			() => choiceResponse('billing', 0.9),
+		);
+
+		await expect(Decisions.prototype.execute.call(functions)).rejects.toThrow(/'Model' is empty/);
 	});
 });

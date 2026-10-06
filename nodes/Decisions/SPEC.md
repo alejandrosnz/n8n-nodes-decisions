@@ -1,6 +1,6 @@
-# TypeSafe AI node — specification
+# Decisions node — specification
 
-Normative specification for the `TypeSafe AI` n8n community node. Every
+Normative specification for the `Decisions` n8n community node. Every
 requirement is stated so that an implementation can be checked against it.
 
 - **MUST** / **MUST NOT** — required; a violation is a defect.
@@ -31,14 +31,14 @@ A single node exposing two operations:
 
 | Field | Value |
 | --- | --- |
-| `name` | `@typesafe-ai/n8n-nodes-typesafe-ai` |
+| `name` | `n8n-nodes-decisions` |
 | `license` | `MIT` |
-| `author.name` | `TypeSafe AI` |
-| `author.email` | `support@typesafe.ai` |
+| `author.name` | `Alejandro Sanz` |
+| `author.email` | `alxbck1@gmail.com` |
 | `repository.type` | `git` |
-| `repository.url` | `git+https://github.com/typesafe-ai/n8n-nodes-typesafe-ai.git` |
-| `homepage` | `https://github.com/typesafe-ai/n8n-nodes-typesafe-ai#readme` |
-| `bugs.url` | `https://github.com/typesafe-ai/n8n-nodes-typesafe-ai/issues` |
+| `repository.url` | `git+https://github.com/alejandrosnz/n8n-nodes-decisions.git` |
+| `homepage` | `https://github.com/alejandrosnz/n8n-nodes-decisions#readme` |
+| `bugs.url` | `https://github.com/alejandrosnz/n8n-nodes-decisions/issues` |
 | `keywords` | MUST include `n8n-community-node-package` |
 | `files` | `["dist"]` |
 
@@ -67,7 +67,7 @@ Dev dependencies are exempt from rules 1–3.
 
 ## 3. Credential
 
-Identified as `typeSafeAiApi` and displayed as **TypeSafe AI API**.
+Identified as `decisionsApi` and displayed as **Decisions API**.
 Documentation link: `https://docs.typesafe.ai`. It MUST
 carry the node's light and dark icons.
 
@@ -75,14 +75,25 @@ carry the node's light and dark icons.
 
 | Label | Visible | Required | Default | Purpose |
 | --- | --- | --- | --- | --- |
+| Provider | yes | yes | `typesafe` | `typesafe`, `openrouter` or `custom` |
 | API Key | yes, masked | yes | — | Bearer token for the API |
-| Base URL | no | no | `https://api.typesafe.ai` | Host the node calls |
+| Base URL | only for `custom` | for `custom` | — | Host the node calls for a custom provider |
+| Endpoint Path | yes | no | blank | Path the node calls; blank means the provider default |
 
 1. The API key MUST be stored and displayed as a password field.
-2. The base URL MUST be present in the credential schema but hidden from the
-   credential UI, so n8n Connect can set it without exposing a free-text host
-   box to every user.
-3. No secret may be hardcoded anywhere in the package.
+2. The effective host is `https://api.typesafe.ai` for the `typesafe`
+   provider, `https://openrouter.ai/api/v1` for the `openrouter` provider,
+   and the custom base URL for the `custom` provider. Surrounding whitespace
+   and trailing slashes MUST be ignored. A `custom` provider without a base
+   URL is an error. A non-blank base URL MUST be a valid URL using `https`,
+   except `http` on localhost for local development.
+3. The effective path is **Endpoint Path** when non-blank, otherwise the
+   provider default: `/v1/systemone` for TypeSafe AI and custom providers,
+   `/api/alpha/decisions` for OpenRouter. A non-blank value MUST be a plain
+   path: a leading slash is added when missing, duplicate slashes are
+   collapsed, and absolute URLs, `.`/`..` segments, queries and fragments are
+   errors.
+4. No secret may be hardcoded anywhere in the package.
 
 ### 3.2 Behaviour
 
@@ -91,7 +102,8 @@ carry the node's light and dark icons.
 2. The effective host is the base URL when it holds a non-blank value,
    otherwise the default above. Surrounding whitespace and trailing slashes
    MUST be ignored.
-3. The credential MUST offer a test that issues `GET {host}/v1/models` and
+3. The credential MUST offer a test that issues `GET {host}/v1/models`
+   (`GET {host}/models` for the `openrouter` provider) and
    reports success or failure to the user.
 4. The API key MUST be sent only to the effective host. A response that
    redirects to another host MUST NOT receive it.
@@ -102,12 +114,12 @@ carry the node's light and dark icons.
 
 | Property | Value |
 | --- | --- |
-| Display name | `TypeSafe AI` |
-| Identifier | `typeSafeAi` |
+| Display name | `Decisions` |
+| Identifier | `decisions` |
 | Group | `transform` |
 | Version | `1` |
-| Description | `Ask TypeSafe typed questions and get calibrated probabilities` |
-| Default instance name | `TypeSafe AI` |
+| Description | `Ask Decisions API typed questions and get calibrated probabilities` |
+| Default instance name | `Decisions` |
 | Subtitle | The selected operation |
 | Inputs | One main input |
 | Outputs | Per §8.3 |
@@ -122,7 +134,7 @@ The node's codex file MUST declare:
 
 | Key | Value |
 | --- | --- |
-| `node` | `@typesafe-ai/n8n-nodes-typesafe-ai.typeSafeAi` |
+| `node` | `n8n-nodes-decisions.decisions` |
 | `categories` | `["Development", "Utility"]` |
 | `resources.primaryDocumentation` | `https://docs.typesafe.ai` |
 | `resources.credentialDocumentation` | `https://docs.typesafe.ai` |
@@ -134,10 +146,10 @@ The node's codex file MUST declare:
 sub-node system, which hides anything not declared as an AI root node from both
 the node panel and search. This node is an ordinary transform node.
 
-`alias` MUST be populated; it drives n8n Connect discoverability:
-`typesafe`, `jev`, `classify`, `classification`, `route`, `routing`, `triage`,
-`guardrail`, `moderation`, `score`, `rank`, `extract`, `system one`,
-`probability`, `confidence`.
+`alias` MUST be populated; it drives discoverability:
+`decisions`, `typesafe`, `jev`, `classify`, `classification`, `route`,
+`routing`, `triage`, `guardrail`, `moderation`, `score`, `rank`, `extract`,
+`system one`, `probability`, `confidence`.
 
 ---
 
@@ -148,6 +160,8 @@ Fields are identified by the label the user sees.
 1. A field MUST be shown only for the operations listed against it.
    **Operation**, **Model**, **State Format**, **State** and **Options** are
    shown for both operations.
+2. **Model** MUST appear directly after **Operation**, before **State Format**,
+   as a top-level field and not inside **Options**.
 2. Fields within a list entry are displayed in the order the entry declares
    them. That order MUST read as the user fills the entry in: first the field
    that decides what the rest of the entry looks like, then the field
@@ -178,17 +192,7 @@ offered there.
 
 ### 5.2 Model
 
-Required, both operations. Default `jev-latest`.
-
-The user MUST be able to either:
-
-1. **Pick from a list** of the models their account can use, fetched live from
-   the API, searchable, each entry showing the model's description and release
-   date; or
-2. **Enter an ID directly**, for example `jev-1.13.0`.
-
-A directly entered ID MUST be accepted even when it does not appear in the
-list, because the API accepts versioned IDs it does not advertise.
+Required, both operations. A plain text model ID, for example `jev-latest`.
 
 ### 5.3 State
 
@@ -312,7 +316,7 @@ Each **Routes** entry is titled by its **Name**:
 | Description | no | The criteria for choosing this route. |
 
 Each **Levels** entry is titled and filled in exactly as a Score question's
-levels in §5.4.
+levels in §5.3.
 
 A route's **Name**, a level's **Level**, the **Question Type**, both meanings
 and both thresholds MUST NOT be settable by expression. Between them they decide how many outputs
@@ -338,8 +342,10 @@ There MUST NOT be an option for renaming the output field. See §8.4.
 
 ## 6. Request
 
-One request per input item, to `POST {host}/v1/systemone`, carrying exactly
-`state`, `model` and `questions`.
+One request per input item, to `POST {host}{endpoint path}`, carrying exactly
+`state`, `model` and `questions`. The endpoint path is §3.1: the provider
+default when the credential's **Endpoint Path** is blank, otherwise the entered
+path as normalized there.
 
 ### 6.1 Questions for Evaluate
 

@@ -1,14 +1,15 @@
 {
-	"name": "@typesafe-ai/n8n-nodes-typesafe-ai",
-	"version": "0.9.0",
-	"description": "Ask TypeSafe AI's System One models (Jev!) typed questions and route items by the answer, with calibrated probabilities",
+	"name": "n8n-nodes-decisions",
+	"version": "0.1.0",
+	"description": "Ask Decisions API typed questions and route items by the answer, with calibrated probabilities",
 	"license": "MIT",
-	"homepage": "https://github.com/typesafe-ai/n8n-nodes-typesafe-ai#readme",
+	"homepage": "https://github.com/alejandrosnz/n8n-nodes-decisions#readme",
 	"keywords": [
 		"n8n-community-node-package",
 		"n8n",
+		"decisions",
+		"decisions-api",
 		"typesafe",
-		"typesafe-ai",
 		"jev",
 		"system-one",
 		"classification",
@@ -18,16 +19,20 @@
 		"ai"
 	],
 	"author": {
-		"name": "TypeSafe AI",
-		"email": "support@typesafe.ai"
+		"name": "Alejandro Sanz",
+		"email": "alxbck1@gmail.com"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/typesafe-ai/n8n-nodes-typesafe-ai.git"
+		"url": "git+https://github.com/alejandrosnz/n8n-nodes-decisions.git"
 	},
 	"bugs": {
-		"url": "https://github.com/typesafe-ai/n8n-nodes-typesafe-ai/issues"
+		"url": "https://github.com/alejandrosnz/n8n-nodes-decisions/issues"
 	},
+	"engines": {
+		"node": ">=20.15"
+	},
+	"main": "index.js",
 	"scripts": {
 		"build": "n8n-node build",
 		"build:watch": "tsc --watch",
@@ -36,6 +41,8 @@
 		"lint:fix": "n8n-node lint --fix",
 		"test": "vitest run",
 		"test:watch": "vitest",
+		"type-check": "tsc --noEmit",
+		"release": "n8n-node release",
 		"prepublishOnly": "n8n-node prerelease"
 	},
 	"files": [
@@ -49,16 +56,18 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/TypeSafeAiApi.credentials.js"
+			"dist/credentials/DecisionsApi.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/TypeSafeAi/TypeSafeAi.node.js"
+			"dist/nodes/Decisions/Decisions.node.js"
 		]
 	},
 	"devDependencies": {
 		"@n8n/node-cli": "^0.48.6",
+		"@vitest/coverage-v8": "^3.2.7",
 		"eslint": "9.32.0",
 		"prettier": "3.6.2",
+		"release-it": "^19.0.4",
 		"typescript": "5.9.2",
 		"vitest": "^3.2.4"
 	},

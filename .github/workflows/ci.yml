@@ -12,45 +12,64 @@ concurrency:
 
 permissions:
   contents: read
-  statuses: read
 
 jobs:
   # The org's CI ruleset requires a passing check with this name
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22.x, 24.x]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
+      - name: Set up Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
       # Lint, test and build need no install scripts, so none are run
       - name: Install dependencies
         run: 'npm ci --ignore-scripts'
 
-      - name: Run lint
-        run: 'npm run lint'
+      - name: Run linter
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
 
       - name: Run tests
-        run: 'npm test'
+        run: npm test -- --run --coverage
 
       - name: Run build
-        run: 'npm run build'
+        run: npm run build
 
-      - name: Wait for Dagger Cloud checks
-        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
-        with:
-          version: "0.21.8"
-          call: |
-            wait-dagger-checks
-              --repo=${{ github.repository }}
-              --ref=${{ github.event.pull_request.head.sha || github.sha }}
-              --token=env:GITHUB_TOKEN
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Test Summary
+        if: always()
+        run: |
+          NODE_VERSION=$(node --version)
+
+          echo "## Test Results - Node ${NODE_VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "### Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            LINES=$(node -pe "require('./coverage/coverage-summary.json').total.lines.pct")
+            STATEMENTS=$(node -pe "require('./coverage/coverage-summary.json').total.statements.pct")
+            FUNCTIONS=$(node -pe "require('./coverage/coverage-summary.json').total.functions.pct")
+            BRANCHES=$(node -pe "require('./coverage/coverage-summary.json').total.branches.pct")
+
+            echo "| Metric | Coverage |" >> $GITHUB_STEP_SUMMARY
+            echo "| ------ | -------- |" >> $GITHUB_STEP_SUMMARY
+            echo "| Lines | ${LINES}% |" >> $GITHUB_STEP_SUMMARY
+            echo "| Statements | ${STATEMENTS}% |" >> $GITHUB_STEP_SUMMARY
+            echo "| Functions | ${FUNCTIONS}% |" >> $GITHUB_STEP_SUMMARY
+            echo "| Branches | ${BRANCHES}% |" >> $GITHUB_STEP_SUMMARY
+          fi
