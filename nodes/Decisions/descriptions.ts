@@ -180,16 +180,16 @@ const routeLevelFields: INodeProperties[] = [
 const evaluateOperation = {
 	name: 'Evaluate',
 	value: 'evaluate',
-	description: 'Evaluate the state against System One questions and output answers',
-	action: 'Evaluate state against System One questions',
+	description: 'Evaluate the state against Decisions questions and output answers',
+	action: 'Evaluate state against Decisions questions',
 };
 
 const routeOperation = {
 	name: 'Route',
 	value: 'route',
 	description:
-		'Evaluate the state against a System One question and send the item to the matching output',
-	action: 'Route item by System One question',
+		'Evaluate the state against a Decisions question and send the item to the matching output',
+	action: 'Route item by Decisions question',
 };
 
 const operationProperty = {
@@ -200,7 +200,7 @@ const operationProperty = {
 	default: 'evaluate',
 };
 
-export const typeSafeAiProperties: INodeProperties[] = [
+export const decisionsProperties: INodeProperties[] = [
 	{
 		...operationProperty,
 		displayOptions: { show: { '@tool': [false] } },
@@ -216,24 +216,20 @@ export const typeSafeAiProperties: INodeProperties[] = [
 	{
 		displayName: 'Model',
 		name: 'model',
-		type: 'resourceLocator',
+		type: 'string',
 		required: true,
-		default: { mode: 'list', value: 'jev-latest', cachedResultName: 'jev-latest' },
-		description: 'Which model to use',
-		modes: [
-			{
-				displayName: 'From List',
-				name: 'list',
-				type: 'list',
-				typeOptions: { searchListMethod: 'searchModels', searchable: true },
-			},
-			{
-				displayName: 'By ID',
-				name: 'id',
-				type: 'string',
-				placeholder: 'e.g. jev-latest',
-			},
-		],
+		default: '',
+		placeholder: 'e.g. jev-latest',
+		description: 'The model ID to evaluate with, e.g. jev-latest',
+	},
+	{
+		displayName: 'Endpoint Path',
+		name: 'endpointPath',
+		type: 'string',
+		default: '',
+		placeholder: 'e.g. /api/alpha/decisions',
+		description:
+			"Leave blank to use the default for your provider: '/v1/systemone' for TypeSafe AI and custom, '/api/alpha/decisions' for OpenRouter",
 	},
 	{
 		displayName: 'State Format',
@@ -257,7 +253,7 @@ export const typeSafeAiProperties: INodeProperties[] = [
 		typeOptions: { rows: 4 },
 		displayOptions: { show: { stateFormat: ['text'] } },
 		description: 'The content to evaluate',
-		placeholder: 'Add content for TypeSafe to evaluate',
+		placeholder: 'Add content for Decisions to evaluate',
 	},
 	{
 		displayName: 'State',
@@ -267,7 +263,7 @@ export const typeSafeAiProperties: INodeProperties[] = [
 		default: '{}',
 		displayOptions: { show: { stateFormat: ['json'] } },
 		description: 'The content to evaluate',
-		placeholder: 'Add content for TypeSafe to evaluate',
+		placeholder: 'Add content for Decisions to evaluate',
 	},
 	{
 		displayName: 'Questions Format',

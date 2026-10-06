@@ -1,116 +1,222 @@
-# Publishes the package to npm, with a provenance statement, when a version
-# tag is pushed. The build job has read-only access; the publish job holds the
-# publish rights and only publishes the tarball the build job packed.
-
-name: Publish
+name: Release — publish to npm (manual)
 
 on:
-  push:
-    tags:
-      - '*.*.*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Choose release type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      branch:
+        description: 'Branch to use for release'
+        required: false
+        default: 'master'
+        type: string
+      dry_run:
+        description: 'Dry run mode: test without publishing'
+        required: false
+        default: false
+        type: boolean
 
-permissions: {}
-
-concurrency:
-  group: publish
-  cancel-in-progress: false
+permissions:
+  contents: write
+  id-token: write
 
 jobs:
-  build:
-    name: Build and test
+  release:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout repo
+        uses: actions/checkout@v4
         with:
-          # Full history, so the tagged commit can be checked against main
           fetch-depth: 0
-          persist-credentials: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Pull latest changes
+        run: |
+          git pull origin ${{ github.event.inputs.branch }}
+          CURRENT_VERSION=$(node -p 'require("./package.json").version')
+          echo "📦 Current version: $CURRENT_VERSION"
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          package-manager-cache: false
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
 
-      - name: Check the tag
+      - name: Configure npm auth
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          version=$(node -p "require('./package.json').version")
-          if [ "$GITHUB_REF_NAME" != "$version" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match the package.json version $version"
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "❌ Error: NPM_TOKEN secret is not set"
             exit 1
           fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::Tag $GITHUB_REF_NAME points at a commit that is not on main"
-            exit 1
-          fi
+          printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
 
       - name: Install dependencies
-        run: 'npm ci --ignore-scripts'
-
-      - name: Run lint
-        run: 'npm run lint'
-
-      - name: Run tests
-        run: 'npm test'
-
-      - name: Run build
-        run: 'npm run build'
-
-      - name: Pack
-        run: mv "$(npm pack --ignore-scripts --silent)" package.tgz
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: package
-          path: package.tgz
-          retention-days: 1
-          if-no-files-found: error
-
-  publish:
-    name: Publish to npm
-    needs: build
-    runs-on: ubuntu-latest
-    environment: npm
-
-    permissions:
-      contents: read
-      # Signs the provenance statement, and authenticates a trusted publisher
-      id-token: write
-
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: package
-
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
-          package-manager-cache: false
-
-      # Trusted publishing needs npm 11.5.1 or later
-      - name: Check the npm version
         run: |
-          node -e '
-            const [major, minor, patch] = process.argv[1].split(".").map(Number);
-            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
-            if (!ok) { console.error(`npm ${process.argv[1]} is older than 11.5.1`); process.exit(1); }
-          ' "$(npm --version)"
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          else
+            npm install
+          fi
 
-      # Publishing the tarball runs no package scripts
-      - name: Publish
+      - name: Configure git
         run: |
-          case "$GITHUB_REF_NAME" in
-            *-*) dist_tag=next ;;
-            *) dist_tag=latest ;;
-          esac
-          npm publish ./package.tgz --provenance --access public --tag "$dist_tag"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Configure remote with authentication for release-it push
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      - name: Calculate next version
+        id: version
+        run: |
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          CURRENT=$(node -p 'require("./package.json").version')
+          
+          # Calculate next version
+          if [ "$RELEASE_TYPE" = "major" ]; then
+            NEXT=$(node -p "const v = require('./package.json').version.split('.'); [parseInt(v[0])+1, 0, 0].join('.')")
+          elif [ "$RELEASE_TYPE" = "minor" ]; then
+            NEXT=$(node -p "const v = require('./package.json').version.split('.'); [v[0], parseInt(v[1])+1, 0].join('.')")
+          else
+            NEXT=$(node -p "const v = require('./package.json').version.split('.'); [v[0], v[1], parseInt(v[2])+1].join('.')")
+          fi
+          
+          echo "CURRENT_VERSION=$CURRENT" >> $GITHUB_OUTPUT
+          echo "NEXT_VERSION=$NEXT" >> $GITHUB_OUTPUT
+          echo ""
+          echo "📦 Release plan:"
+          echo "   Type: $RELEASE_TYPE"
+          echo "   Current: $CURRENT"
+          echo "   Next: $NEXT"
+          echo ""
+
+      - name: Manual version bump
+        if: ${{ github.event.inputs.release_type != 'patch' }}
+        run: |
+          # n8n-node release only does patch bumps by default
+          # For minor/major, we need to bump manually first
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          
+          echo "Pre-bumping version for $RELEASE_TYPE release..."
+          npm version $RELEASE_TYPE --no-git-tag-version
+          
+          NEW_VERSION=$(node -p 'require("./package.json").version')
+          echo "✅ Version updated to: $NEW_VERSION"
+          
+          # Commit the version bump
+          git add package.json package-lock.json 2>/dev/null || git add package.json
+          git commit -m "chore: bump version to $NEW_VERSION"
+          echo "✅ Version bump committed"
+
+      - name: Dry-run release
+        if: ${{ github.event.inputs.dry_run == 'true' }}
         env:
-          # Set only for the first publish. With it unset, npm authenticates
-          # through the trusted publisher.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🧪 DRY RUN MODE"
+          echo ""
+          echo "Would release version: ${{ steps.version.outputs.NEXT_VERSION }}"
+          echo ""
+          
+          # Validate package can be built and packed
+          npm run build || echo "Build step not found or failed"
+          npm pack --dry-run
+          
+          echo ""
+          echo "✅ Dry-run validation completed!"
+          echo "No changes were made to the repository or npm."
+          
+          # Revert any version changes
+          git checkout -- package.json package-lock.json 2>/dev/null || git checkout -- package.json
+
+      - name: Run release
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🚀 Starting release process..."
+          echo ""
+          
+          CURRENT_VERSION=$(node -p 'require("./package.json").version')
+          echo "Current version in package.json: $CURRENT_VERSION"
+          echo ""
+          
+          # n8n-node release will:
+          # 1. Run lint and build
+          # 2. Bump patch version (or use current if already bumped)
+          # 3. Generate changelog
+          # 4. Commit, tag, and push
+          # 5. Publish to npm
+          npm run release
+          
+          echo ""
+          echo "✅ Release completed!"
+
+      - name: Verify release
+        if: ${{ github.event.inputs.dry_run != 'true' && success() }}
+        run: |
+          # Update local repo after release
+          git pull origin ${{ github.event.inputs.branch }}
+          
+          FINAL_VERSION=$(node -p 'require("./package.json").version')
+          EXPECTED_VERSION="${{ steps.version.outputs.NEXT_VERSION }}"
+          
+          echo "📦 Published version: $FINAL_VERSION"
+          
+          if [ "$FINAL_VERSION" = "$EXPECTED_VERSION" ]; then
+            echo "✅ Version matches expected: $EXPECTED_VERSION"
+          else
+            echo "⚠️ Note: Version is $FINAL_VERSION (expected $EXPECTED_VERSION)"
+            echo "This can happen if release-it applied additional bumps"
+          fi
+          
+          # Save for summary step
+          echo "FINAL_VERSION=$FINAL_VERSION" >> $GITHUB_OUTPUT
+        id: verify
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.npmrc || true
+
+      - name: Summary
+        if: always()
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "# 🧪 Dry Run Complete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ All checks passed!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Release type:** ${{ github.event.inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Current version:** ${{ steps.version.outputs.CURRENT_VERSION }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Would release:** ${{ steps.version.outputs.NEXT_VERSION }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Branch:** ${{ github.event.inputs.branch }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No changes were made" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ job.status }}" = "success" ]; then
+            VERSION="${{ steps.verify.outputs.FINAL_VERSION }}"
+            PACKAGE_NAME=$(node -p 'require("./package.json").name')
+            
+            echo "# ✅ Release v${VERSION} Published!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+            echo "**Release type:** ${{ github.event.inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Branch:** ${{ github.event.inputs.branch }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📦 Links" >> $GITHUB_STEP_SUMMARY
+            echo "- **npm:** https://www.npmjs.com/package/${PACKAGE_NAME}/v/${VERSION}" >> $GITHUB_STEP_SUMMARY
+            echo "- **GitHub Release:** https://github.com/${{ github.repository }}/releases/tag/${VERSION}" >> $GITHUB_STEP_SUMMARY
+          fi

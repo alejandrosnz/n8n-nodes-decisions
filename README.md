@@ -1,8 +1,10 @@
-# @typesafe-ai/n8n-nodes-typesafe-ai
+# n8n-nodes-decisions
 
-This n8n community node lets your workflows call TypeSafe AI's [System One models](https://docs.typesafe.ai/concepts/system-one). You give a System One model a [state](https://docs.typesafe.ai/concepts/state), which is the content you want judged, plus typed questions about it. The model returns a structured answer to each question, with probabilities. Jev is TypeSafe's flagship model and the first System One model.
+This n8n community node lets your workflows call a Decisions-compatible API: TypeSafe AI's [System One models](https://docs.typesafe.ai/concepts/system-one) or the same capability through OpenRouter. You give the model a [state](https://docs.typesafe.ai/concepts/state), which is the content you want judged, plus typed questions about it. The model returns a structured answer to each question, with probabilities.
 
 The node has two operations. **Evaluate** adds the answers to each item. **Route** picks an output for each item based on the answer to one question.
+
+Based on [typesafe-ai/n8n-nodes-typesafe-ai](https://github.com/typesafe-ai/n8n-nodes-typesafe-ai).
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/choose-n8n/faircode-license/) workflow automation platform.
 
@@ -18,15 +20,23 @@ The node has two operations. **Evaluate** adds the answers to each item. **Route
 
 ## Installation
 
-Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n community nodes documentation, and use the package name `@typesafe-ai/n8n-nodes-typesafe-ai`.
+Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n community nodes documentation, and use the package name `n8n-nodes-decisions`.
 
 ## Credentials
 
-Create an API key in the [TypeSafe console](https://console.typesafe.ai/keys). In n8n, add a **TypeSafe AI API** credential and paste the key into **API Key**. n8n checks the key when you save the credential.
+Add a **Decisions API** credential and pick a **Provider**:
+
+| Provider | API Key | Base URL |
+| --- | --- | --- |
+| TypeSafe AI | Create one in the [TypeSafe console](https://console.typesafe.ai/keys) | Built in (`https://api.typesafe.ai`) |
+| OpenRouter | Create one in your [OpenRouter dashboard](https://openrouter.ai) | Built in (`https://openrouter.ai/api/v1`) |
+| Custom (Decisions Compatible) | Your provider key | Enter the provider base URL, e.g. `https://api.custom.com/v1` |
+
+n8n checks the key when you save the credential.
 
 ## Operations
 
-Both operations send one request per input item. Each request includes the item's state, the selected **Model**, and the questions.
+Both operations send one request per input item. Each request includes the item's state, the **Model** ID, and the questions.
 
 **State Format** sets where the state comes from:
 
@@ -38,11 +48,13 @@ Both operations send one request per input item. Each request includes the item'
 
 All the questions in a request are asked about the same state. The [State](https://docs.typesafe.ai/concepts/state) page covers how to structure it.
 
-**Model** lists the models your API key can use. The [Models](https://docs.typesafe.ai/models) page describes each one and its aliases.
+**Model** is a plain text model ID, e.g. `jev-latest`. The [Models](https://docs.typesafe.ai/models) page describes TypeSafe models and their aliases. For OpenRouter or custom providers, enter the model ID your provider expects.
+
+**Endpoint Path** is optional. Leave it blank to use the default for your provider: `/v1/systemone` for TypeSafe AI and custom providers, `/api/alpha/decisions` for OpenRouter. Enter a custom path only if your provider documents a different one.
 
 ### Evaluate
 
-Evaluate asks one or more questions about the state and adds all the answers to the item. Each question is one of TypeSafe's three [question types](https://docs.typesafe.ai/primitives):
+Evaluate asks one or more questions about the state and adds all the answers to the item. Each question is one of three [question types](https://docs.typesafe.ai/primitives):
 
 | Question Type | Answer |
 | --- | --- |
@@ -91,9 +103,9 @@ The `route` field holds the answer in the same form Evaluate uses, and the outpu
 
 ## Example workflow
 
-This workflow triages support tickets. A webhook receives each ticket, and the TypeSafe AI node's Route operation asks a Choice question with three routes: `billing`, `tech support` and `sales`. Each route's output leads to that team. **Confidence Handling** is set to **Route to Separate Fallback Output**, so a ticket answered below **Confidence Threshold** leaves from `Fallback` instead. A Switch node then sends it on by its confidence, either to be flagged for review or to a human queue.
+This workflow triages support tickets. A webhook receives each ticket, and the Decisions node's Route operation asks a Choice question with three routes: `billing`, `tech support` and `sales`. Each route's output leads to that team. **Confidence Handling** is set to **Route to Separate Fallback Output**, so a ticket answered below **Confidence Threshold** leaves from `Fallback` instead. A Switch node then sends it on by its confidence, either to be flagged for review or to a human queue.
 
-![An n8n workflow in which a webhook receives a support ticket, the TypeSafe AI node routes it to the billing, tech support or sales team, and its Fallback output leads to a Switch node that sends the ticket for review or to a human queue](docs/images/example-workflow.png)
+![An n8n workflow in which a webhook receives a support ticket, the Decisions node routes it to the billing, tech support or sales team, and its Fallback output leads to a Switch node that sends the ticket for review or to a human queue](docs/images/example-workflow.png)
 
 ## Output
 
@@ -139,6 +151,7 @@ Tested with n8n 2.40.
 * [TypeSafe AI quickstart](https://docs.typesafe.ai/introduction/quickstart)
 * [TypeSafe AI documentation](https://docs.typesafe.ai)
 * [TypeSafe AI API reference](https://docs.typesafe.ai/api)
+* [OpenRouter documentation](https://openrouter.ai/docs)
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
 
 ## Version history

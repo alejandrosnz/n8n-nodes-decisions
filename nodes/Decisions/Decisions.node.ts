@@ -8,8 +8,8 @@ import type {
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import type { Answer, ChoiceAnswer, NoulAnswer, ScoreAnswer } from './api';
-import { CREDENTIAL_NAME, evaluateState, searchModels } from './api';
-import { typeSafeAiProperties } from './descriptions';
+import { CREDENTIAL_NAME, evaluateState } from './api';
+import { decisionsProperties } from './descriptions';
 import type { CriteriaEntry, ItemContext, LevelEntry, QuestionEntry } from './helpers';
 import {
 	buildCriteriaMap,
@@ -60,6 +60,14 @@ function buildState(
 		fail(context, "'State' is empty", 'Enter the content to evaluate');
 	}
 	return text;
+}
+
+function readModel(functions: IExecuteFunctions, context: ItemContext): string {
+	const model = functions.getNodeParameter('model', context.itemIndex, '') as string;
+	if (typeof model !== 'string' || model.trim() === '') {
+		fail(context, "'Model' is empty", 'Enter the model ID to evaluate with');
+	}
+	return model.trim();
 }
 
 function isNoulRoute(functions: IExecuteFunctions, itemIndex: number): boolean {
@@ -201,25 +209,21 @@ function buildQuestions(
 	);
 }
 
-export class TypeSafeAi implements INodeType {
+export class Decisions implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'TypeSafe AI',
-		name: 'typeSafeAi',
-		icon: { light: 'file:typeSafeAi.svg', dark: 'file:typeSafeAi.dark.svg' },
+		displayName: 'Decisions',
+		name: 'decisions',
+		icon: { light: 'file:decisions.svg', dark: 'file:decisions.dark.svg' },
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{ $parameter["operation"] }}',
-		description: 'Ask TypeSafe typed questions and get calibrated probabilities',
-		defaults: { name: 'TypeSafe AI' },
+		description: 'Ask Decisions API typed questions and get calibrated probabilities',
+		defaults: { name: 'Decisions' },
 		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
 		outputs: `={{ (${configuredOutputs})($parameter) }}`,
 		credentials: [{ name: CREDENTIAL_NAME, required: true }],
-		properties: typeSafeAiProperties,
-	};
-
-	methods = {
-		listSearch: { searchModels },
+		properties: decisionsProperties,
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -266,10 +270,11 @@ export class TypeSafeAi implements INodeType {
 				itemIndex,
 				{
 					state: buildState(this, context, item),
-					model: this.getNodeParameter('model', itemIndex, '', { extractValue: true }) as string,
+					model: readModel(this, context),
 					questions: buildQuestions(this, context, operation),
 				} as IDataObject,
 				this.getNodeParameter('options.timeout', itemIndex, 5000) as number,
+				this.getNodeParameter('endpointPath', itemIndex, '') as string,
 			);
 
 			if (!isRoute) {

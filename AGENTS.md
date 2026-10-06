@@ -1,6 +1,8 @@
-# TypeSafe AI n8n node
+# Decisions n8n node
 
-An n8n community node that calls TypeSafe's System One API (`POST /v1/systemone`). It has two operations, Evaluate and Route.
+An n8n community node that calls a Decisions-compatible API (TypeSafe's System One `POST /v1/systemone` or OpenRouter's `POST /api/alpha/decisions`). It has two operations, Evaluate and Route.
+
+Based on [typesafe-ai/n8n-nodes-typesafe-ai](https://github.com/typesafe-ai/n8n-nodes-typesafe-ai).
 
 ## Commands
 
@@ -11,17 +13,21 @@ An n8n community node that calls TypeSafe's System One API (`POST /v1/systemone`
 
 ## Layout
 
-- `nodes/TypeSafeAi/` holds the node. `descriptions.ts` has the fields and copy, `TypeSafeAi.node.ts` runs the requests and routing, `helpers.ts` builds questions and outputs, and `api.ts` makes the HTTP calls.
-- `credentials/` holds the API key credential.
-- `nodes/TypeSafeAi/SPEC.md` specifies the node's behaviour. Keep it in step with any change to the node.
+- `nodes/Decisions/` holds the node. `descriptions.ts` has the fields and copy, `Decisions.node.ts` runs the requests and routing, `helpers.ts` builds questions and outputs, and `api.ts` makes the HTTP calls.
+- `credentials/` holds the Decisions API credential with `typesafe`, `openrouter` and `custom` providers.
+- `nodes/Decisions/SPEC.md` specifies the node's behaviour. Keep it in step with any change to the node.
+- `agents/` holds testing guides copied from the n8n community node starter.
 
 ## Rules
 
 - Answers keep the API's own field names: `noul`, `choice`, `score`, `confidence`. Simplify only drops `type`, `probabilities` and `legend`.
 - Copy follows n8n's UX guidelines: Title Case labels, sentence case descriptions, "e.g." placeholders, and parameter names in single quotes.
-- The README documents the n8n side of the node and links to docs.typesafe.ai for TypeSafe concepts.
+- The README documents the n8n side of the node and links to docs.typesafe.ai for Decisions concepts.
+- All code and comments are written in English.
 
 ## Releasing
 
-1. Set the version in `package.json` and `CHANGELOG.md`, and merge to `main`.
-2. Push a tag with the same version, such as `0.9.0`. `.github/workflows/publish.yml` checks the tag and publishes to npm with provenance.
+Releases use the starter's manual workflow (see `.github/workflows/publish.yml`):
+
+1. Run the Release workflow with the wanted `release_type` (`patch`, `minor` or `major`).
+2. The workflow bumps the version, updates the changelog, tags and publishes to npm.

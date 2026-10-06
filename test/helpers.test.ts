@@ -11,14 +11,14 @@ import {
 	configuredOutputs,
 	parseQuestionsJson,
 	simplifyAnswers,
-} from '../nodes/TypeSafeAi/helpers';
-import type { ItemContext } from '../nodes/TypeSafeAi/helpers';
-import type { Answer } from '../nodes/TypeSafeAi/api';
+} from '../nodes/Decisions/helpers';
+import type { ItemContext } from '../nodes/Decisions/helpers';
+import type { Answer } from '../nodes/Decisions/api';
 
 const node: INode = {
 	id: 'a',
-	name: 'TypeSafe AI',
-	type: 'typeSafeAi',
+	name: 'Decisions',
+	type: 'decisions',
 	typeVersion: 1,
 	position: [0, 0],
 	parameters: {},

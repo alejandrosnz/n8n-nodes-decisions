@@ -3,25 +3,54 @@ import { describe, expect, it } from 'vitest';
 import {
 	BASE_URL_EXPRESSION,
 	DEFAULT_BASE_URL,
+	DEFAULT_DECISIONS_PATH,
+	DEFAULT_SYSTEMONE_PATH,
 	describeApiError,
+	OPENROUTER_BASE_URL,
 	resolveBaseUrl,
-} from '../nodes/TypeSafeAi/api';
+	resolveEndpointPath,
+} from '../nodes/Decisions/api';
 
 describe('resolveBaseUrl', () => {
 	it.each([
-		[undefined, 'https://api.typesafe.ai'],
-		['', 'https://api.typesafe.ai'],
-		['   ', 'https://api.typesafe.ai'],
-		['  https://eu.typesafe.ai///  ', 'https://eu.typesafe.ai'],
-	])('resolves %s', (raw, expected) => {
-		expect(resolveBaseUrl(raw)).toBe(expected);
+		[{}, 'https://api.typesafe.ai'],
+		[{ provider: 'typesafe' }, 'https://api.typesafe.ai'],
+		[{ provider: 'typesafe', baseUrl: '' }, 'https://api.typesafe.ai'],
+		[{ provider: 'typesafe', baseUrl: '  https://eu.example.com///  ' }, 'https://eu.example.com'],
+		[{ provider: 'openrouter' }, 'https://openrouter.ai/api/v1'],
+		[{ provider: 'openrouter', baseUrl: '' }, 'https://openrouter.ai/api/v1'],
+		[{ provider: 'custom', baseUrl: 'https://api.custom.com/v1/' }, 'https://api.custom.com/v1'],
+	])('resolves %j', (credentials, expected) => {
+		expect(resolveBaseUrl(credentials)).toBe(expected);
+	});
+
+	it('rejects a custom provider without a base URL', () => {
+		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: '  ' })).toThrow(/'Base URL' is empty/);
+	});
+});
+
+describe('resolveEndpointPath', () => {
+	it('uses the SystemOne path by default for TypeSafe AI and custom providers', () => {
+		expect(resolveEndpointPath('typesafe', '')).toBe(DEFAULT_SYSTEMONE_PATH);
+		expect(resolveEndpointPath('custom', undefined)).toBe(DEFAULT_SYSTEMONE_PATH);
+		expect(resolveEndpointPath(undefined, '')).toBe(DEFAULT_SYSTEMONE_PATH);
+	});
+
+	it('uses the Decisions path by default for OpenRouter', () => {
+		expect(resolveEndpointPath('openrouter', '')).toBe(DEFAULT_DECISIONS_PATH);
+	});
+
+	it('uses a custom path when one is given', () => {
+		expect(resolveEndpointPath('openrouter', 'custom/path')).toBe('/custom/path');
+		expect(resolveEndpointPath('typesafe', '/api/alpha/decisions')).toBe('/api/alpha/decisions');
 	});
 });
 
 describe('BASE_URL_EXPRESSION', () => {
-	it('interpolates the default host rather than shipping the placeholder', () => {
+	it('interpolates the default hosts rather than shipping a placeholder', () => {
 		expect(BASE_URL_EXPRESSION).not.toContain('${');
-		expect(BASE_URL_EXPRESSION).toContain(`|| '${DEFAULT_BASE_URL}'`);
+		expect(BASE_URL_EXPRESSION).toContain(DEFAULT_BASE_URL);
+		expect(BASE_URL_EXPRESSION).toContain(OPENROUTER_BASE_URL);
 	});
 });
 
@@ -50,7 +79,7 @@ describe('describeApiError', () => {
 	it.each([undefined, '', '   ', '<html><body>502 Bad Gateway</body></html>'])(
 		'falls back to the status code given %s',
 		(body) => {
-			expect(describeApiError(body, 502)).toBe('The TypeSafe AI API returned status 502');
+			expect(describeApiError(body, 502)).toBe('The Decisions API returned status 502');
 		},
 	);
 });
