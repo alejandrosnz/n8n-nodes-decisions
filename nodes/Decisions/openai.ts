@@ -46,32 +46,45 @@ function toOpenAiQuestion(name: string, question: IDataObject): IDataObject {
 	return { name, ...question };
 }
 
+const OPENAI_ROLES = ['system', 'developer', 'user', 'assistant', 'tool'];
+
+/** An OpenAI message: the shape users paste when they want multimodal input */
+function looksLikeMessage(value: unknown): boolean {
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+		return false;
+	}
+	const item = value as IDataObject;
+	return typeof item.role === 'string' && OPENAI_ROLES.includes(item.role) && 'content' in item;
+}
+
 /** An OpenAI message array is not usable input: its images would go over as text */
 function isMessageArray(state: unknown): boolean {
-	return (
-		Array.isArray(state) &&
-		state.length > 0 &&
-		state.every(
-			(item) =>
-				typeof item === 'object' &&
-				item !== null &&
-				typeof (item as IDataObject).role === 'string' &&
-				'content' in item,
-		)
-	);
+	return Array.isArray(state) && state.length > 0 && state.every(looksLikeMessage);
+}
+
+/** A raw array is sent as-is, so missing or duplicated names must fail before the call */
+function assertNamedQuestions(questions: IDataObject[]): void {
+	const names = questions.map((question) => (question as IDataObject | null)?.name);
+	if (names.some((name) => typeof name !== 'string' || name.trim() === '')) {
+		throw new Error("Every question in a raw array needs a 'name'");
+	}
+	if (new Set(names).size !== names.length) {
+		throw new Error('Question names in a raw array must be unique');
+	}
 }
 
 /** Turns the node's request body into OpenAI's Decisions request body */
 export function toOpenAiRequest(body: IDataObject): IDataObject {
 	const state = body.state;
-	if (isMessageArray(state)) {
+	if (isMessageArray(state) || looksLikeMessage(state)) {
 		throw new Error(
-			"'State' looks like an array of OpenAI messages, which the node does not support. Send the content as text or JSON instead.",
+			"'State' looks like OpenAI messages, which the node does not support. Send the content as text or JSON instead.",
 		);
 	}
 	const input = typeof state === 'string' ? state : JSON.stringify(state);
 	const questions = body.questions;
 	if (Array.isArray(questions)) {
+		assertNamedQuestions(questions as IDataObject[]);
 		return { model: body.model, input, questions };
 	}
 	const converted = Object.entries((questions ?? {}) as IDataObject).map(([name, question]) =>

@@ -29,8 +29,21 @@ describe('toOpenAiRequest', () => {
 	it('rejects a state that looks like an array of OpenAI messages', () => {
 		const state = [{ role: 'user', content: 'Hi' }];
 		expect(() => toOpenAiRequest(baseBody({}, state))).toThrow(
-			/'State' looks like an array of OpenAI messages/,
+			/'State' looks like OpenAI messages/,
 		);
+	});
+
+	it('rejects a state that looks like a single OpenAI message', () => {
+		const state = { role: 'user', content: 'Hi' };
+		expect(() => toOpenAiRequest(baseBody({}, state))).toThrow(
+			/'State' looks like OpenAI messages/,
+		);
+	});
+
+	it('stringifies an object that only resembles a message', () => {
+		const state = { role: 'admin', ticket: 1 };
+		const result = toOpenAiRequest(baseBody({}, state));
+		expect(result.input).toBe(JSON.stringify(state));
 	});
 
 	it('rejects a converted question with empty instructions', () => {
@@ -137,6 +150,30 @@ describe('toOpenAiRequest', () => {
 		const questions = [{ type: 'predicate', name: 'is_urgent', instructions: 'Is it urgent?' }];
 		const result = toOpenAiRequest(baseBody(questions));
 		expect(result.questions).toEqual(questions);
+	});
+
+	it('rejects a raw array with a question missing its name', () => {
+		const questions = [{ type: 'predicate', instructions: 'Is it urgent?' }];
+		expect(() => toOpenAiRequest(baseBody(questions))).toThrow(
+			/Every question in a raw array needs a 'name'/,
+		);
+	});
+
+	it('rejects a raw array with a blank question name', () => {
+		const questions = [{ type: 'predicate', name: '  ', instructions: 'Is it urgent?' }];
+		expect(() => toOpenAiRequest(baseBody(questions))).toThrow(
+			/Every question in a raw array needs a 'name'/,
+		);
+	});
+
+	it('rejects a raw array with duplicated question names', () => {
+		const questions = [
+			{ type: 'predicate', name: 'is_urgent', instructions: 'Is it urgent?' },
+			{ type: 'predicate', name: 'is_urgent', instructions: 'Is it urgent?' },
+		];
+		expect(() => toOpenAiRequest(baseBody(questions))).toThrow(
+			/Question names in a raw array must be unique/,
+		);
 	});
 
 	it('returns exactly model, input and questions', () => {

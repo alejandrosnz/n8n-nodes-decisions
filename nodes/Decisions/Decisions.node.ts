@@ -300,7 +300,6 @@ export class Decisions implements INodeType {
 
 		const credentials = (await this.getCredentials(CREDENTIAL_NAME)) as DecisionsCredentials;
 		const isOpenAi = usesOpenAiFormat(credentials);
-		const allowArrayQuestions = isOpenAi;
 
 		const processItem = async (itemIndex: number, includeOtherFields: boolean): Promise<void> => {
 			const item = items[itemIndex];
@@ -312,7 +311,7 @@ export class Decisions implements INodeType {
 				{
 					state: buildState(this, context, item),
 					model: readModel(this, context),
-					questions: buildQuestions(this, context, operation, allowArrayQuestions),
+					questions: buildQuestions(this, context, operation, isOpenAi),
 				} as IDataObject,
 				this.getNodeParameter('options.timeout', itemIndex, 5000) as number,
 			);

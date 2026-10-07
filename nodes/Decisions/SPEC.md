@@ -396,12 +396,13 @@ the response back:
 | Score question | `score` question; the criteria array becomes `levels: [{ label }]`, in the same order |
 
 A **Using Raw JSON** value that is already an array of OpenAI questions is
-sent unchanged.
+sent unchanged, but every entry needs a unique non-blank `name`: missing
+or duplicated names are an error before the request is sent.
 
-There is no image support: a state that looks like an array of OpenAI
-messages is an error; any other object or array state is sent as its
-`JSON.stringify` form. A converted question with empty instructions is an
-error.
+There is no image support: a state that looks like OpenAI messages, as one
+message or an array of them, is an error; any other object or array state
+is sent as its `JSON.stringify` form. A converted question with empty
+instructions is an error.
 
 ---
 
@@ -542,7 +543,7 @@ Outputs for a **Score**:
 8. An item goes to the level nearest its score: level *i* takes scores from
    *i* − 0.5 up to, but not including, *i* + 0.5. A score exactly halfway goes
    to the higher level. A score below the lowest level or above the highest
-   goes to that end.
+   goes to that end. A score that is not a finite number is an error.
 
 Score, simplified:
 

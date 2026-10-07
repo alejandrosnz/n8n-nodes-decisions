@@ -24,26 +24,25 @@ describe('resolveBaseUrl', () => {
 		[{ provider: 'openrouter', baseUrl: '' }, 'https://openrouter.ai'],
 		[{ provider: 'openai' }, 'https://api.openai.com'],
 		[{ provider: 'openai', baseUrl: '' }, 'https://api.openai.com'],
-		[
-			{ provider: 'openai', baseUrl: 'https://eu.api.openai.com/' },
-			'https://eu.api.openai.com',
-		],
+		[{ provider: 'openai', baseUrl: 'https://eu.api.openai.com/' }, 'https://eu.api.openai.com'],
 		[{ provider: 'custom', baseUrl: 'https://api.custom.com/v1/' }, 'https://api.custom.com/v1'],
 	])('resolves %j', (credentials, expected) => {
 		expect(resolveBaseUrl(credentials)).toBe(expected);
 	});
 
 	it('rejects a custom provider without a base URL', () => {
-		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: '  ' })).toThrow(/'Base URL' is empty/);
+		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: '  ' })).toThrow(
+			/'Base URL' is empty/,
+		);
 	});
 
 	it('rejects non-https base URLs', () => {
-		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: 'http://api.custom.com/v1' })).toThrow(
-			/must use https/,
-		);
-		expect(() => resolveBaseUrl({ provider: 'typesafe', baseUrl: 'http://eu.example.com' })).toThrow(
-			/must use https/,
-		);
+		expect(() =>
+			resolveBaseUrl({ provider: 'custom', baseUrl: 'http://api.custom.com/v1' }),
+		).toThrow(/must use https/);
+		expect(() =>
+			resolveBaseUrl({ provider: 'typesafe', baseUrl: 'http://eu.example.com' }),
+		).toThrow(/must use https/);
 	});
 
 	it('rejects base URLs that are not valid URLs', () => {
@@ -91,17 +90,23 @@ describe('resolveEndpointPath', () => {
 	});
 
 	it.each([
-		[{ provider: 'custom', baseUrl: 'https://api.custom.com', apiStyle: 'openai' }, '/v1/decisions'],
-		[{ provider: 'custom', baseUrl: 'https://api.custom.com', apiStyle: 'systemone' }, '/v1/systemone'],
+		[
+			{ provider: 'custom', baseUrl: 'https://api.custom.com', apiStyle: 'openai' },
+			'/v1/decisions',
+		],
+		[
+			{ provider: 'custom', baseUrl: 'https://api.custom.com', apiStyle: 'systemone' },
+			'/v1/systemone',
+		],
 		[{ provider: 'custom', baseUrl: 'https://api.custom.com' }, '/v1/systemone'],
 	])('resolves a custom endpoint path default of %j to %s', (credentials, expected) => {
 		expect(resolveEndpointPath({ ...credentials, endpointPath: '' })).toBe(expected);
 	});
 
 	it('uses a custom path when one is given', () => {
-		expect(
-			resolveEndpointPath({ provider: 'openrouter', endpointPath: 'custom/path' }),
-		).toBe('/custom/path');
+		expect(resolveEndpointPath({ provider: 'openrouter', endpointPath: 'custom/path' })).toBe(
+			'/custom/path',
+		);
 		expect(
 			resolveEndpointPath({ provider: 'typesafe', endpointPath: '/api/alpha/decisions' }),
 		).toBe('/api/alpha/decisions');

@@ -80,7 +80,7 @@ Each answer goes in `answers`, under its question's **ID**:
 
 When an AI Agent uses the node as a tool, the node runs Evaluate.
 
-With OpenAI, Noul questions are sent as predicate questions and their answer is `probability` instead of `noul`. A question the model declines comes back as `{ "type": "refusal" }`. Raw JSON can also be an array of questions in OpenAI's format.
+With OpenAI, Noul questions are sent as predicate questions and their answer is `probability` instead of `noul`. A question the model declines comes back as `{ "type": "refusal" }`. Raw JSON can also be an array of questions in OpenAI's format. Score routing with OpenAI is not yet verified against the live API: levels are assumed numbered from 0, and a score outside the levels stops the node instead of routing.
 
 ### Route
 

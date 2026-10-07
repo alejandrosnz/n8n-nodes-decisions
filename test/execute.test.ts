@@ -998,6 +998,31 @@ describe('OpenAI', () => {
 		expect(outputs[0][0].error).toBeInstanceOf(NodeOperationError);
 	});
 
+	it('rejects a nameless raw array before calling the API', async () => {
+		const { functions, request } = createFunctions(
+			{
+				operation: 'evaluate',
+				model: 'gpt-6-luna',
+				stateFormat: 'text',
+				stateText: 'I was charged twice for my order.',
+				questionsFormat: 'json',
+				questionsJson: JSON.stringify([{ type: 'predicate', instructions: 'Is it urgent?' }]),
+			},
+			items,
+			() => ({ statusCode: 200, body: { answers: [] } }),
+			true,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(request).not.toHaveBeenCalled();
+		expect(outputs[0][0].json).toMatchObject({
+			ticket: 1,
+			error: "Every question in a raw array needs a 'name'",
+		});
+		expect(outputs[0][0].error).toBeInstanceOf(NodeOperationError);
+	});
+
 	it('sends a refused Noul route to the Uncertain output when continuing on fail', async () => {
 		const { functions } = createFunctions(
 			{

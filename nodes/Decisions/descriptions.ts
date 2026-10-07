@@ -28,7 +28,11 @@ const questionEntryFields: INodeProperties[] = [
 		default: 'noul',
 		options: [
 			{ name: 'Choice', value: 'choice', description: 'Pick one from a list of options' },
-			{ name: 'Noul (Yes/No)', value: 'noul', description: 'Return the probability of yes. Sent as a predicate question to OpenAI.' },
+			{
+				name: 'Noul (Yes/No)',
+				value: 'noul',
+				description: 'Return the probability of yes. Sent as a predicate question to OpenAI.',
+			},
 			{ name: 'Score', value: 'score', description: 'Rate against semantically defined levels' },
 		],
 	},
