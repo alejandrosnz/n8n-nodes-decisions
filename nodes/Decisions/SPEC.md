@@ -75,7 +75,7 @@ carry the node's light and dark icons.
 
 | Label | Visible | Required | Default | Purpose |
 | --- | --- | --- | --- | --- |
-| Provider | yes | yes | `typesafe` | `typesafe`, `openrouter` or `custom` |
+| Provider | yes | yes | `typesafe` | `typesafe`, `openrouter`, `openai` or `custom` |
 | API Key | yes, masked | yes | — | Bearer token for the API |
 | Base URL | only for `custom` | for `custom` | — | Host the node calls for a custom provider |
 | Endpoint Path | yes | no | blank | Path the node calls; blank means the provider default |
@@ -83,13 +83,14 @@ carry the node's light and dark icons.
 1. The API key MUST be stored and displayed as a password field.
 2. The effective host is `https://api.typesafe.ai` for the `typesafe`
    provider, `https://openrouter.ai` for the `openrouter` provider,
+   `https://api.openai.com` for the `openai` provider,
    and the custom base URL for the `custom` provider. Surrounding whitespace
    and trailing slashes MUST be ignored. A `custom` provider without a base
    URL is an error. A non-blank base URL MUST be a valid URL using `https`,
    except `http` on localhost for local development.
 3. The effective path is **Endpoint Path** when non-blank, otherwise the
    provider default: `/v1/systemone` for TypeSafe AI and custom providers,
-   `/api/alpha/decisions` for OpenRouter. A non-blank value MUST be a plain
+   `/api/alpha/decisions` for OpenRouter, `/v1/decisions` for OpenAI. A non-blank value MUST be a plain
    path: a leading slash is added when missing, duplicate slashes are
    collapsed, and absolute URLs, `.`/`..` segments, queries and fragments are
    errors.
@@ -376,6 +377,24 @@ Means** and **False Means**, and are omitted entirely when both are blank —
 exactly as for a Noul question in §6.1. For a Score, its `criteria` are the
 **Levels**, sent exactly as for a Score question in §6.1.
 
+### 6.3 OpenAI request
+
+With the `openai` provider the node translates its request into OpenAI's
+Decisions format (`POST {host}/v1/decisions`) before sending, and translates
+the response back:
+
+| Node request | OpenAI request |
+| --- | --- |
+| `state` as text | `input`, unchanged |
+| `state` as an object or array | `input`, `JSON.stringify` of the state |
+| `questions` map keyed by ID | `questions` array, each entry carrying its ID as `name`, in the same order |
+| Noul question | `predicate` question; the given `true`/`false` meanings are appended to `instructions` as `"\n\nA yes means: <true>"` and/or `"\nA no means: <false>"`, only for the meanings given (a lone `false` meaning uses `"\n\nA no means: <false>"`; with neither meaning the instructions are unchanged) |
+| Choice question | `choice` question; the criteria map becomes `choices: [{ value, description }]`, omitting `description` where none was given |
+| Score question | `score` question; the criteria array becomes `levels: [{ label }]`, in the same order |
+
+A **Using Raw JSON** value that is already an array of OpenAI questions is
+sent unchanged.
+
 ---
 
 ## 7. Validation
@@ -420,6 +439,21 @@ One output item per input item:
 4. Each key MUST carry the API's own name and value. Simplifying keeps the
    answer's value and `confidence` and leaves out `type`, `probabilities` and
    `legend`; it MUST NOT rename, derive or add a key.
+
+### 8.1a OpenAI answers
+
+With the `openai` provider the following differences apply:
+
+1. A predicate answer keeps OpenAI's key `probability`, e.g.
+   `{ "probability": 0.95 }` when simplified.
+2. `answers` are still keyed by question ID: the node builds the map from
+   OpenAI's answers array using each entry's `name`.
+3. A question the model declines comes back as a `refusal` answer. It is
+   output as `{ "type": "refusal" }` even when simplified — an explicit
+   exception to §8.1 rule 4, since a refusal has no value and the type is
+   the only thing that tells it apart.
+4. `model` is the ID OpenAI reports when it reports one, and otherwise falls
+   back to the requested model ID.
 
 ### 8.2 Evaluate, raw (Simplify off)
 
@@ -533,6 +567,9 @@ There MUST be no pre-flight size check. A request exceeding the API's token
 budget surfaces the resulting 422 as in §9.1.
 
 ### 9.3 Continue on fail
+
+A `refusal` answer on a Route is a failure and is handled like any other
+failure below.
 
 When the workflow enables it, a failing item MUST be emitted with an `error`
 field, and processing MUST continue with the remaining items. It goes to the

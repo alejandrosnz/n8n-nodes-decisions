@@ -11,6 +11,7 @@
 		"decisions-api",
 		"typesafe",
 		"jev",
+		"openai",
 		"system-one",
 		"classification",
 		"routing",

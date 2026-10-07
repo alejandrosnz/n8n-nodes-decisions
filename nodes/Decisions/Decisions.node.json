@@ -31,6 +31,8 @@
 		"extract",
 		"system one",
 		"probability",
-		"confidence"
+		"confidence",
+		"openai",
+		"predicate"
 	]
 }
