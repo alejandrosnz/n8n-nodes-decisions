@@ -7,7 +7,7 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-import type { Answer, ChoiceAnswer, NoulAnswer, ScoreAnswer } from './api';
+import type { Answer, ChoiceAnswer, NoulAnswer, PredicateAnswer, RefusalAnswer, ScoreAnswer } from './api';
 import { CREDENTIAL_NAME, evaluateState } from './api';
 import { decisionsProperties } from './descriptions';
 import type { CriteriaEntry, ItemContext, LevelEntry, QuestionEntry } from './helpers';
@@ -107,10 +107,13 @@ function readThresholds(
 function resolveChoiceRoute(
 	functions: IExecuteFunctions,
 	context: ItemContext,
-	answer: ChoiceAnswer | undefined,
+	answer: ChoiceAnswer | RefusalAnswer | undefined,
 	routeNames: string[],
 	separateLowConfidence: boolean,
 ): number {
+	if (answer?.type === 'refusal') {
+		fail(context, 'The model refused to answer the route question');
+	}
 	const chosen = answer?.choice ?? '';
 	const targetIndex = routeNames.indexOf(chosen);
 	if (targetIndex === -1) {
@@ -126,17 +129,21 @@ function resolveChoiceRoute(
 function resolveNoulRoute(
 	functions: IExecuteFunctions,
 	context: ItemContext,
-	answer: NoulAnswer | undefined,
+	answer: NoulAnswer | PredicateAnswer | RefusalAnswer | undefined,
 	hasUncertain: boolean,
 ): number {
 	if (answer === undefined) {
 		fail(context, 'The model returned no answer for this route');
 	}
+	if (answer.type === 'refusal') {
+		fail(context, 'The model refused to answer the route question');
+	}
+	const probability = answer.type === 'predicate' ? answer.probability : answer.noul;
 	const { trueThreshold, falseThreshold } = readThresholds(functions, context);
-	if (answer.noul >= trueThreshold) {
+	if (probability >= trueThreshold) {
 		return 0;
 	}
-	if (answer.noul <= falseThreshold) {
+	if (probability <= falseThreshold) {
 		return 1;
 	}
 	return hasUncertain ? 2 : 1;
@@ -145,11 +152,14 @@ function resolveNoulRoute(
 /** The index of the output a Score answer routes to: its nearest level */
 function resolveScoreRoute(
 	context: ItemContext,
-	answer: ScoreAnswer | undefined,
+	answer: ScoreAnswer | RefusalAnswer | undefined,
 	levelCount: number,
 ): number {
 	if (answer === undefined) {
 		fail(context, 'The model returned no answer for this route');
+	}
+	if (answer.type === 'refusal') {
+		fail(context, 'The model refused to answer the route question');
 	}
 	return nearestLevel(answer.score, levelCount);
 }
@@ -297,13 +307,22 @@ export class Decisions implements INodeType {
 						? simplifyAnswer(answer)
 						: (answer as unknown as IDataObject);
 			const targetIndex = isNoul
-				? resolveNoulRoute(this, context, answer as NoulAnswer | undefined, hasUncertain)
+				? resolveNoulRoute(
+						this,
+						context,
+						answer as NoulAnswer | PredicateAnswer | RefusalAnswer | undefined,
+						hasUncertain,
+					)
 				: isScore
-					? resolveScoreRoute(context, answer as ScoreAnswer | undefined, levelCount)
+					? resolveScoreRoute(
+							context,
+							answer as ScoreAnswer | RefusalAnswer | undefined,
+							levelCount,
+						)
 					: resolveChoiceRoute(
 							this,
 							context,
-							answer as ChoiceAnswer | undefined,
+							answer as ChoiceAnswer | RefusalAnswer | undefined,
 							routeNames,
 							separateLowConfidence,
 						);
