@@ -6,6 +6,8 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
 
+import { fromOpenAiResponse, toOpenAiRequest } from './openai';
+
 export const CREDENTIAL_NAME = 'decisionsApi';
 export const DEFAULT_BASE_URL = 'https://api.typesafe.ai';
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai';
@@ -230,15 +232,18 @@ export async function evaluateState(
 	timeout: number,
 ): Promise<DecisionsResponse> {
 	const credentials = (await context.getCredentials(CREDENTIAL_NAME)) as DecisionsCredentials;
+	const isOpenAi = normalizeProvider(credentials.provider) === 'openai';
 	const response = await apiRequest(
 		context,
 		{
 			method: 'POST',
 			path: resolveEndpointPath(credentials),
-			body,
+			body: isOpenAi ? toOpenAiRequest(body) : body,
 			timeout,
 		},
 		itemIndex,
 	);
-	return response as DecisionsResponse;
+	return isOpenAi
+		? fromOpenAiResponse(response, String(body.model ?? ''))
+		: (response as DecisionsResponse);
 }
