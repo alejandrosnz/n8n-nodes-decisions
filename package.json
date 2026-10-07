@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-decisions",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "Ask Decisions API typed questions and route items by the answer, with calibrated probabilities",
 	"license": "MIT",
 	"homepage": "https://github.com/alejandrosnz/n8n-nodes-decisions#readme",
