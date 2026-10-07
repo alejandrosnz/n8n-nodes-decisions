@@ -9,11 +9,13 @@ import { NodeApiError } from 'n8n-workflow';
 export const CREDENTIAL_NAME = 'decisionsApi';
 export const DEFAULT_BASE_URL = 'https://api.typesafe.ai';
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai';
+export const OPENAI_BASE_URL = 'https://api.openai.com';
 
 export const DEFAULT_SYSTEMONE_PATH = '/v1/systemone';
 export const DEFAULT_DECISIONS_PATH = '/api/alpha/decisions';
+export const DEFAULT_OPENAI_DECISIONS_PATH = '/v1/decisions';
 
-export type DecisionsProvider = 'typesafe' | 'openrouter' | 'custom';
+export type DecisionsProvider = 'typesafe' | 'openrouter' | 'openai' | 'custom';
 
 export interface DecisionsCredentials {
 	provider?: unknown;
@@ -27,7 +29,7 @@ export const OPTION_BOUNDS = { min: 2, max: 255 };
 export const LEVEL_BOUNDS = { min: 2, max: 10 };
 
 function normalizeProvider(raw: unknown): DecisionsProvider {
-	if (raw === 'openrouter' || raw === 'custom' || raw === 'typesafe') {
+	if (raw === 'openrouter' || raw === 'custom' || raw === 'typesafe' || raw === 'openai') {
 		return raw;
 	}
 	return 'typesafe';
@@ -75,6 +77,13 @@ export function resolveBaseUrl(credentials: DecisionsCredentials = {}): string {
 		}
 		return OPENROUTER_BASE_URL;
 	}
+	if (provider === 'openai') {
+		const custom = typeof credentials.baseUrl === 'string' ? credentials.baseUrl.trim() : '';
+		if (custom !== '') {
+			return normalizeBaseUrl(custom);
+		}
+		return OPENAI_BASE_URL;
+	}
 	if (provider === 'custom') {
 		return normalizeBaseUrl(credentials.baseUrl);
 	}
@@ -105,11 +114,13 @@ export function resolveEndpointPath(credentials: DecisionsCredentials = {}): str
 	}
 	return normalizeProvider(credentials.provider) === 'openrouter'
 		? DEFAULT_DECISIONS_PATH
-		: DEFAULT_SYSTEMONE_PATH;
+		: normalizeProvider(credentials.provider) === 'openai'
+			? DEFAULT_OPENAI_DECISIONS_PATH
+			: DEFAULT_SYSTEMONE_PATH;
 }
 
 /** The same base URL resolution as resolveBaseUrl, for the declarative credential test */
-export const BASE_URL_EXPRESSION = `={{ $credentials.baseUrl || ($credentials.provider === 'openrouter' ? '${OPENROUTER_BASE_URL}' : '${DEFAULT_BASE_URL}') }}`;
+export const BASE_URL_EXPRESSION = `={{ $credentials.baseUrl || ($credentials.provider === 'openrouter' ? '${OPENROUTER_BASE_URL}' : $credentials.provider === 'openai' ? '${OPENAI_BASE_URL}' : '${DEFAULT_BASE_URL}') }}`;
 
 export type QuestionType = 'choice' | 'noul' | 'score';
 
@@ -162,6 +173,11 @@ export function describeApiError(body: unknown, statusCode: number): string {
 	}
 	if (typeof body === 'string' && body.trim() !== '' && !body.trimStart().startsWith('<')) {
 		return body.trim();
+	}
+	const errorMessage = (body as { error?: { message?: unknown } } | null | undefined)?.error
+		?.message;
+	if (typeof errorMessage === 'string' && errorMessage !== '') {
+		return errorMessage;
 	}
 	return `The Decisions API returned status ${statusCode}`;
 }

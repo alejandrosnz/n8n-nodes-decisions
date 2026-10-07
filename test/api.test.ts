@@ -4,8 +4,10 @@ import {
 	BASE_URL_EXPRESSION,
 	DEFAULT_BASE_URL,
 	DEFAULT_DECISIONS_PATH,
+	DEFAULT_OPENAI_DECISIONS_PATH,
 	DEFAULT_SYSTEMONE_PATH,
 	describeApiError,
+	OPENAI_BASE_URL,
 	OPENROUTER_BASE_URL,
 	resolveBaseUrl,
 	resolveEndpointPath,
@@ -19,6 +21,12 @@ describe('resolveBaseUrl', () => {
 		[{ provider: 'typesafe', baseUrl: '  https://eu.example.com///  ' }, 'https://eu.example.com'],
 		[{ provider: 'openrouter' }, 'https://openrouter.ai'],
 		[{ provider: 'openrouter', baseUrl: '' }, 'https://openrouter.ai'],
+		[{ provider: 'openai' }, 'https://api.openai.com'],
+		[{ provider: 'openai', baseUrl: '' }, 'https://api.openai.com'],
+		[
+			{ provider: 'openai', baseUrl: 'https://eu.api.openai.com/' },
+			'https://eu.api.openai.com',
+		],
 		[{ provider: 'custom', baseUrl: 'https://api.custom.com/v1/' }, 'https://api.custom.com/v1'],
 	])('resolves %j', (credentials, expected) => {
 		expect(resolveBaseUrl(credentials)).toBe(expected);
@@ -67,6 +75,20 @@ describe('resolveEndpointPath', () => {
 		);
 	});
 
+	it.each([
+		[{ provider: 'openai', endpointPath: '' }, '/v1/decisions'],
+		[{ provider: 'openai', endpointPath: '/v2/x' }, '/v2/x'],
+	])('resolves OpenAI endpoint path %j', (credentials, expected) => {
+		expect(resolveEndpointPath(credentials)).toBe(expected);
+	});
+
+	it('uses the OpenAI default path constant', () => {
+		expect(DEFAULT_OPENAI_DECISIONS_PATH).toBe('/v1/decisions');
+		expect(resolveEndpointPath({ provider: 'openai', endpointPath: '' })).toBe(
+			DEFAULT_OPENAI_DECISIONS_PATH,
+		);
+	});
+
 	it('uses a custom path when one is given', () => {
 		expect(
 			resolveEndpointPath({ provider: 'openrouter', endpointPath: 'custom/path' }),
@@ -103,6 +125,8 @@ describe('BASE_URL_EXPRESSION', () => {
 		expect(BASE_URL_EXPRESSION).not.toContain('${');
 		expect(BASE_URL_EXPRESSION).toContain(DEFAULT_BASE_URL);
 		expect(BASE_URL_EXPRESSION).toContain(OPENROUTER_BASE_URL);
+		expect(BASE_URL_EXPRESSION).toContain(OPENAI_BASE_URL);
+		expect(BASE_URL_EXPRESSION).toContain('https://api.openai.com');
 	});
 });
 
@@ -126,6 +150,12 @@ describe('describeApiError', () => {
 
 	it('uses a plain text body that did not parse as JSON', () => {
 		expect(describeApiError('  Upstream connect error  ', 502)).toBe('Upstream connect error');
+	});
+
+	it('uses the OpenAI error message', () => {
+		expect(describeApiError({ error: { message: 'Invalid API key' } }, 401)).toBe(
+			'Invalid API key',
+		);
 	});
 
 	it.each([undefined, '', '   ', '<html><body>502 Bad Gateway</body></html>'])(
