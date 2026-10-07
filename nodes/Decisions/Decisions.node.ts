@@ -168,7 +168,8 @@ function buildQuestions(
 	functions: IExecuteFunctions,
 	context: ItemContext,
 	operation: string,
-): IDataObject {
+	allowArray: boolean,
+): IDataObject | IDataObject[] {
 	const { itemIndex } = context;
 	if (operation === 'route') {
 		const instructions = (
@@ -211,7 +212,11 @@ function buildQuestions(
 		};
 	}
 	if ((functions.getNodeParameter('questionsFormat', itemIndex) as string) === 'json') {
-		return parseQuestionsJson(context, functions.getNodeParameter('questionsJson', itemIndex));
+		return parseQuestionsJson(
+			context,
+			functions.getNodeParameter('questionsJson', itemIndex),
+			allowArray,
+		);
 	}
 	return buildQuestionsFromEntries(
 		context,
@@ -271,6 +276,9 @@ export class Decisions implements INodeType {
 			() => [],
 		);
 
+		const credentials = (await this.getCredentials(CREDENTIAL_NAME)) as { provider?: unknown };
+		const allowArrayQuestions = credentials.provider === 'openai';
+
 		const processItem = async (itemIndex: number, includeOtherFields: boolean): Promise<void> => {
 			const item = items[itemIndex];
 			const context: ItemContext = { node, itemIndex };
@@ -281,7 +289,7 @@ export class Decisions implements INodeType {
 				{
 					state: buildState(this, context, item),
 					model: readModel(this, context),
-					questions: buildQuestions(this, context, operation),
+					questions: buildQuestions(this, context, operation, allowArrayQuestions),
 				} as IDataObject,
 				this.getNodeParameter('options.timeout', itemIndex, 5000) as number,
 			);

@@ -163,10 +163,22 @@ export function buildQuestionsFromEntries(
 	return questions;
 }
 
-export function parseQuestionsJson(context: ItemContext, raw: unknown): IDataObject {
+export function parseQuestionsJson(
+	context: ItemContext,
+	raw: unknown,
+	allowArray = false,
+): IDataObject | IDataObject[] {
 	const parsed = parseJsonParameter(context, raw, 'Questions');
+	if (allowArray && Array.isArray(parsed)) {
+		return parsed as IDataObject[];
+	}
 	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-		fail(context, "'Questions' must be a JSON object keyed by question ID");
+		fail(
+			context,
+			allowArray
+				? "'Questions' must be a JSON object keyed by question ID, or an array of OpenAI questions"
+				: "'Questions' must be a JSON object keyed by question ID",
+		);
 	}
 	return parsed as IDataObject;
 }

@@ -161,6 +161,30 @@ describe('parseQuestionsJson', () => {
 	it('rejects a JSON array', () => {
 		expect(() => parseQuestionsJson(context, '[]')).toThrow(/keyed by question ID/);
 	});
+
+	it('accepts an array with allowArray', () => {
+		const raw = '[{"type":"predicate","name":"q","instructions":"Urgent?"}]';
+		expect(parseQuestionsJson(context, raw, true)).toEqual([
+			{ type: 'predicate', name: 'q', instructions: 'Urgent?' },
+		]);
+	});
+
+	it('rejects an array without allowArray', () => {
+		expect(() => parseQuestionsJson(context, '[]', false)).toThrow(/keyed by question ID/);
+	});
+
+	it('accepts an object with and without allowArray', () => {
+		const raw = '{"q":{"type":"noul","instructions":"Urgent?"}}';
+		const expected = { q: { type: 'noul', instructions: 'Urgent?' } };
+		expect(parseQuestionsJson(context, raw, false)).toEqual(expected);
+		expect(parseQuestionsJson(context, raw, true)).toEqual(expected);
+	});
+
+	it('rejects a non-object with allowArray', () => {
+		expect(() => parseQuestionsJson(context, '42', true)).toThrow(
+			/or an array of OpenAI questions/,
+		);
+	});
 });
 
 describe('simplifyAnswers', () => {
