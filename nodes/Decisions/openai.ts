@@ -2,40 +2,73 @@ import type { IDataObject } from 'n8n-workflow';
 
 import type { Answer, DecisionsResponse } from './api';
 
+function instructionsOf(question: IDataObject): string {
+	return typeof question.instructions === 'string' ? question.instructions : '';
+}
+
 function toOpenAiQuestion(name: string, question: IDataObject): IDataObject {
+	const instructions = instructionsOf(question);
+	if (instructions.trim() === '') {
+		throw new Error(`'Instructions' is empty for question '${name}'`);
+	}
 	const type = question.type;
 	if (type === 'noul') {
 		const criteria = (question.criteria ?? {}) as IDataObject;
 		const yesMeans = criteria.true;
 		const noMeans = criteria.false;
-		let instructions = question.instructions as string;
-		if (typeof yesMeans === 'string' && yesMeans !== '' && typeof noMeans === 'string' && noMeans !== '') {
-			instructions = `${instructions}\n\nA yes means: ${yesMeans}\nA no means: ${noMeans}`;
+		let full = instructions;
+		if (
+			typeof yesMeans === 'string' &&
+			yesMeans !== '' &&
+			typeof noMeans === 'string' &&
+			noMeans !== ''
+		) {
+			full = `${full}\n\nA yes means: ${yesMeans}\nA no means: ${noMeans}`;
 		} else if (typeof yesMeans === 'string' && yesMeans !== '') {
-			instructions = `${instructions}\n\nA yes means: ${yesMeans}`;
+			full = `${full}\n\nA yes means: ${yesMeans}`;
 		} else if (typeof noMeans === 'string' && noMeans !== '') {
-			instructions = `${instructions}\n\nA no means: ${noMeans}`;
+			full = `${full}\n\nA no means: ${noMeans}`;
 		}
-		return { type: 'predicate', name, instructions };
+		return { type: 'predicate', name, instructions: full };
 	}
 	if (type === 'choice') {
-		const criteria = ((question.criteria ?? {}) as IDataObject) as Record<string, unknown>;
+		const criteria = (question.criteria ?? {}) as IDataObject as Record<string, unknown>;
 		const choices = Object.entries(criteria).map(([value, description]) =>
 			description == null ? { value } : { value, description },
 		);
-		return { type: 'choice', name, instructions: question.instructions, choices };
+		return { type: 'choice', name, instructions: instructionsOf(question), choices };
 	}
 	if (type === 'score') {
-		const criteria = ((question.criteria ?? []) as unknown[]) as string[];
+		const criteria = (question.criteria ?? []) as unknown[] as string[];
 		const levels = criteria.map((label) => ({ label }));
-		return { type: 'score', name, instructions: question.instructions, levels };
+		return { type: 'score', name, instructions: instructionsOf(question), levels };
 	}
 	return { name, ...question };
+}
+
+/** An OpenAI message array is not usable input: its images would go over as text */
+function isMessageArray(state: unknown): boolean {
+	return (
+		Array.isArray(state) &&
+		state.length > 0 &&
+		state.every(
+			(item) =>
+				typeof item === 'object' &&
+				item !== null &&
+				typeof (item as IDataObject).role === 'string' &&
+				'content' in item,
+		)
+	);
 }
 
 /** Turns the node's request body into OpenAI's Decisions request body */
 export function toOpenAiRequest(body: IDataObject): IDataObject {
 	const state = body.state;
+	if (isMessageArray(state)) {
+		throw new Error(
+			"'State' looks like an array of OpenAI messages, which the node does not support. Send the content as text or JSON instead.",
+		);
+	}
 	const input = typeof state === 'string' ? state : JSON.stringify(state);
 	const questions = body.questions;
 	if (Array.isArray(questions)) {
@@ -47,18 +80,38 @@ export function toOpenAiRequest(body: IDataObject): IDataObject {
 	return { model: body.model, input, questions: converted };
 }
 
-/** Turns OpenAI's Decisions response into the response shape the node works with */
-export function fromOpenAiResponse(body: unknown, requestedModel: string): DecisionsResponse {
+/** Turns OpenAI's Decisions response into the response shape the node works with.
+ * `sentNames` are the question names in the order they were sent. An answer
+ * without a `name` falls back to the question at its position; a missing
+ * name, a duplicated name, or a count that does not match is an error. */
+export function fromOpenAiResponse(
+	body: unknown,
+	requestedModel: string,
+	sentNames: Array<string | null> = [],
+): DecisionsResponse {
 	const raw = (body ?? {}) as { answers?: unknown; model?: unknown; usage?: unknown };
 	let answers: Record<string, Answer>;
 	if (Array.isArray(raw.answers)) {
-		answers = Object.create(null) as Record<string, Answer>;
-		for (const entry of raw.answers) {
-			if (typeof entry !== 'object' || entry === null) continue;
-			const { name, ...rest } = entry as IDataObject & { name?: unknown };
-			if (typeof name !== 'string') continue;
-			answers[name] = rest as unknown as Answer;
+		if (sentNames.length > 0 && raw.answers.length !== sentNames.length) {
+			throw new Error(
+				`OpenAI returned ${raw.answers.length} answers for ${sentNames.length} questions`,
+			);
 		}
+		answers = Object.create(null) as Record<string, Answer>;
+		raw.answers.forEach((entry, i) => {
+			if (typeof entry !== 'object' || entry === null) {
+				throw new Error(`OpenAI answer #${i} is not an object`);
+			}
+			const { name, ...rest } = entry as IDataObject & { name?: unknown };
+			const resolved = typeof name === 'string' ? name : (sentNames[i] ?? null);
+			if (resolved == null) {
+				throw new Error(`OpenAI answer #${i} has no name`);
+			}
+			if (resolved in answers) {
+				throw new Error(`Duplicate answer name '${resolved}'`);
+			}
+			answers[resolved] = rest as unknown as Answer;
+		});
 	} else if (typeof raw.answers === 'object' && raw.answers !== null) {
 		answers = raw.answers as Record<string, Answer>;
 	} else {

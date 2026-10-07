@@ -12,6 +12,7 @@ package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Translation of requests and responses to OpenAI's Decisions API beta.
 - Support for `predicate` and `refusal` answers.
 - API Style in the credential, so a custom provider can speak OpenAI's Decisions format.
+- OpenAI answers keep OpenAI's keys: predicate answers use `probability` instead of `noul`, and a refused question comes back as `{ "type": "refusal" }` even when Simplify is on. Expressions reading those keys need the provider's form.
 
 ## 0.1.0
 

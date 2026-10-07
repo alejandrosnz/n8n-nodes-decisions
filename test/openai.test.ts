@@ -20,6 +20,25 @@ describe('toOpenAiRequest', () => {
 		expect(result.input).toBe(JSON.stringify(state));
 	});
 
+	it('stringifies a non-message array state', () => {
+		const state = [{ ticket: 1 }];
+		const result = toOpenAiRequest(baseBody({}, state));
+		expect(result.input).toBe(JSON.stringify(state));
+	});
+
+	it('rejects a state that looks like an array of OpenAI messages', () => {
+		const state = [{ role: 'user', content: 'Hi' }];
+		expect(() => toOpenAiRequest(baseBody({}, state))).toThrow(
+			/'State' looks like an array of OpenAI messages/,
+		);
+	});
+
+	it('rejects a converted question with empty instructions', () => {
+		expect(() => toOpenAiRequest(baseBody({ is_urgent: { type: 'noul' } }))).toThrow(
+			/'Instructions' is empty for question 'is_urgent'/,
+		);
+	});
+
 	it('leaves a noul without criteria unchanged apart from the type', () => {
 		const result = toOpenAiRequest(
 			baseBody({ is_urgent: { type: 'noul', instructions: 'Is it urgent?' } }),
@@ -40,9 +59,9 @@ describe('toOpenAiRequest', () => {
 			}),
 		);
 		const [question] = result.questions as Array<{ instructions: string }>;
-		expect(question.instructions.endsWith('\n\nA yes means: Needs action today\nA no means: Can wait')).toBe(
-			true,
-		);
+		expect(
+			question.instructions.endsWith('\n\nA yes means: Needs action today\nA no means: Can wait'),
+		).toBe(true);
 	});
 
 	it('appends only the no meaning when just false exists', () => {
@@ -147,9 +166,9 @@ describe('fromOpenAiResponse', () => {
 	});
 
 	it('uses the reported model when present', () => {
-		expect(
-			fromOpenAiResponse({ model: 'gpt-6-luna-2026', answers: [] }, 'gpt-6-luna').model,
-		).toBe('gpt-6-luna-2026');
+		expect(fromOpenAiResponse({ model: 'gpt-6-luna-2026', answers: [] }, 'gpt-6-luna').model).toBe(
+			'gpt-6-luna-2026',
+		);
 	});
 
 	it('passes usage through when present and omits it otherwise', () => {
@@ -164,5 +183,84 @@ describe('fromOpenAiResponse', () => {
 			'gpt-6-luna',
 		);
 		expect(response.answers).toEqual({ something: { type: 'refusal' } });
+	});
+
+	it('keeps a score answer with array probabilities', () => {
+		const response = fromOpenAiResponse(
+			{
+				answers: [
+					{
+						type: 'score',
+						name: 'severity',
+						score: 1.3,
+						confidence: 0.9,
+						probabilities: [
+							{ label: 'Calm', probability: 0.1, value: 0 },
+							{ label: 'Workaround available', probability: 0.6, value: 1 },
+							{ label: 'Blocking', probability: 0.3, value: 2 },
+						],
+					},
+				],
+			},
+			'gpt-6-luna',
+		);
+		expect(response.answers).toEqual({
+			severity: {
+				type: 'score',
+				score: 1.3,
+				confidence: 0.9,
+				probabilities: [
+					{ label: 'Calm', probability: 0.1, value: 0 },
+					{ label: 'Workaround available', probability: 0.6, value: 1 },
+					{ label: 'Blocking', probability: 0.3, value: 2 },
+				],
+			},
+		});
+	});
+
+	it('falls back to the sent order for an answer without a name', () => {
+		const response = fromOpenAiResponse(
+			{ answers: [{ type: 'predicate', probability: 0.9 }] },
+			'gpt-6-luna',
+			['is_urgent'],
+		);
+		expect(response.answers).toEqual({ is_urgent: { type: 'predicate', probability: 0.9 } });
+	});
+
+	it('rejects an answer without a usable name', () => {
+		expect(() =>
+			fromOpenAiResponse({ answers: [{ type: 'predicate', probability: 0.9 }] }, 'gpt-6-luna'),
+		).toThrow(/has no name/);
+		expect(() =>
+			fromOpenAiResponse(
+				{ answers: [{ type: 'predicate', name: null, probability: 0.9 }] },
+				'gpt-6-luna',
+				[null],
+			),
+		).toThrow(/has no name/);
+	});
+
+	it('rejects duplicated answer names', () => {
+		expect(() =>
+			fromOpenAiResponse(
+				{
+					answers: [
+						{ type: 'predicate', name: 'is_urgent', probability: 0.9 },
+						{ type: 'predicate', name: 'is_urgent', probability: 0.1 },
+					],
+				},
+				'gpt-6-luna',
+			),
+		).toThrow(/Duplicate answer name 'is_urgent'/);
+	});
+
+	it('rejects a count that does not match the questions sent', () => {
+		expect(() =>
+			fromOpenAiResponse(
+				{ answers: [{ type: 'predicate', name: 'is_urgent', probability: 0.9 }] },
+				'gpt-6-luna',
+				['is_urgent', 'department'],
+			),
+		).toThrow(/1 answers for 2 questions/);
 	});
 });

@@ -98,7 +98,7 @@ Each question type has its own way to add or change outputs:
 - **Noul: Uncertain output.** Both thresholds start at `0.5`, so every item goes to True or False. Set them apart, for example `0.8` and `0.2`, to add an `Uncertain` output for answers that fall between the two.
 - **Score: level boundaries.** Levels are numbered from 0, lowest first. The boundary between two levels is halfway between their numbers. A score from `0.5` to just under `1.5` goes to level 1, and a score exactly on a boundary goes to the higher level.
 
-The `route` field holds the answer in the same form Evaluate uses, and the output the item leaves from shows the decision.
+The `route` field holds the answer in the same form Evaluate uses, and the output the item leaves from shows the decision. If the model refuses the route question, that is a failure, handled as in Errors below — it never routes to a decision output.
 
 ```json
 { "route": { "choice": "billing", "confidence": 0.81 }, "model": "jev-1.13.0" }

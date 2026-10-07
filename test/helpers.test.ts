@@ -216,6 +216,10 @@ describe('simplifyAnswers', () => {
 	it('omits a confidence the API did not return', () => {
 		expect(simplifyAnswers({ q: { type: 'score', score: 1 } })).toEqual({ q: { score: 1 } });
 	});
+
+	it('keeps a refusal as its type, which is its only value', () => {
+		expect(simplifyAnswers({ q: { type: 'refusal' } })).toEqual({ q: { type: 'refusal' } });
+	});
 });
 
 describe('configuredOutputs', () => {

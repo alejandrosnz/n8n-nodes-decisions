@@ -1,10 +1,5 @@
-import type {
-	IDataObject,
-	IExecuteFunctions,
-	IHttpRequestMethods,
-	JsonObject,
-} from 'n8n-workflow';
-import { NodeApiError } from 'n8n-workflow';
+import type { IDataObject, IExecuteFunctions, IHttpRequestMethods, JsonObject } from 'n8n-workflow';
+import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 
 import { fromOpenAiResponse, toOpenAiRequest } from './openai';
 
@@ -77,10 +72,17 @@ function normalizeBaseUrl(raw: unknown): string {
 	const stripped = stripTrailingSlashes(trimmed);
 	const parsed = parseBaseUrl(stripped);
 	if (parsed === null) {
-		throw new Error("'Base URL' is not a valid URL. Use an https URL such as https://api.custom.com/v1.");
+		throw new Error(
+			"'Base URL' is not a valid URL. Use an https URL such as https://api.custom.com/v1.",
+		);
 	}
-	if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocalhost(parsed.hostname))) {
-		throw new Error("'Base URL' must use https. Use an https URL such as https://api.custom.com/v1.");
+	if (
+		parsed.protocol !== 'https:' &&
+		!(parsed.protocol === 'http:' && isLocalhost(parsed.hostname))
+	) {
+		throw new Error(
+			"'Base URL' must use https. Use an https URL such as https://api.custom.com/v1.",
+		);
 	}
 	return stripped;
 }
@@ -121,7 +123,9 @@ export function resolveEndpointPath(credentials: DecisionsCredentials = {}): str
 		}
 		const normalized = path.startsWith('/') ? path : `/${path}`;
 		if (normalized.includes('?') || normalized.includes('#')) {
-			throw new Error("'Endpoint Path' must be a path such as /v1/systemone, without query or fragment.");
+			throw new Error(
+				"'Endpoint Path' must be a path such as /v1/systemone, without query or fragment.",
+			);
 		}
 		const segments = normalized.split('/').filter((segment) => segment !== '');
 		if (segments.length === 0 || segments.includes('..') || segments.includes('.')) {
@@ -243,6 +247,33 @@ async function apiRequest(
 	return body;
 }
 
+/** The question names in the order they were sent, for matching OpenAI's answers array */
+function sentQuestionNames(questions: unknown): Array<string | null> {
+	if (Array.isArray(questions)) {
+		return questions.map((question) =>
+			typeof (question as IDataObject)?.name === 'string'
+				? ((question as IDataObject).name as string)
+				: null,
+		);
+	}
+	if (typeof questions === 'object' && questions !== null) {
+		return Object.keys(questions);
+	}
+	return [];
+}
+
+/** A translation failure points at the item, so Continue On Fail collects it */
+function toItemError(
+	context: IExecuteFunctions,
+	itemIndex: number,
+	error: unknown,
+): NodeApiError | NodeOperationError {
+	if (error instanceof NodeApiError || error instanceof NodeOperationError) {
+		return error;
+	}
+	return new NodeOperationError(context.getNode(), error as Error, { itemIndex });
+}
+
 export async function evaluateState(
 	context: IExecuteFunctions,
 	itemIndex: number,
@@ -251,17 +282,34 @@ export async function evaluateState(
 ): Promise<DecisionsResponse> {
 	const credentials = (await context.getCredentials(CREDENTIAL_NAME)) as DecisionsCredentials;
 	const isOpenAi = usesOpenAiFormat(credentials);
+	let requestBody = body;
+	if (isOpenAi) {
+		try {
+			requestBody = toOpenAiRequest(body);
+		} catch (error) {
+			throw toItemError(context, itemIndex, error);
+		}
+	}
 	const response = await apiRequest(
 		context,
 		{
 			method: 'POST',
 			path: resolveEndpointPath(credentials),
-			body: isOpenAi ? toOpenAiRequest(body) : body,
+			body: requestBody,
 			timeout,
 		},
 		itemIndex,
 	);
-	return isOpenAi
-		? fromOpenAiResponse(response, String(body.model ?? ''))
-		: (response as DecisionsResponse);
+	if (!isOpenAi) {
+		return response as DecisionsResponse;
+	}
+	try {
+		return fromOpenAiResponse(
+			response,
+			String(body.model ?? ''),
+			sentQuestionNames(body.questions),
+		);
+	} catch (error) {
+		throw toItemError(context, itemIndex, error);
+	}
 }

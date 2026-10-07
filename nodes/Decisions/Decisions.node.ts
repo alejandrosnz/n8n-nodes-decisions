@@ -7,7 +7,15 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-import type { Answer, ChoiceAnswer, NoulAnswer, PredicateAnswer, RefusalAnswer, ScoreAnswer } from './api';
+import type {
+	Answer,
+	ChoiceAnswer,
+	DecisionsCredentials,
+	NoulAnswer,
+	PredicateAnswer,
+	RefusalAnswer,
+	ScoreAnswer,
+} from './api';
 import { CREDENTIAL_NAME, evaluateState, usesOpenAiFormat } from './api';
 import { decisionsProperties } from './descriptions';
 import type { CriteriaEntry, ItemContext, LevelEntry, QuestionEntry } from './helpers';
@@ -114,7 +122,7 @@ function resolveChoiceRoute(
 	if (answer?.type === 'refusal') {
 		fail(context, 'The model refused to answer the route question');
 	}
-	const chosen = answer?.choice ?? '';
+	const chosen = String(answer?.choice ?? '');
 	const targetIndex = routeNames.indexOf(chosen);
 	if (targetIndex === -1) {
 		fail(context, `The model answered "${chosen}", which is not one of the configured routes`);
@@ -149,11 +157,14 @@ function resolveNoulRoute(
 	return hasUncertain ? 2 : 1;
 }
 
-/** The index of the output a Score answer routes to: its nearest level */
+/** The index of the output a Score answer routes to: its nearest level.
+ * With `rejectOutOfRange` a score outside the levels is an error instead of
+ * going to the nearest end, so an unverified score scale cannot misroute. */
 function resolveScoreRoute(
 	context: ItemContext,
 	answer: ScoreAnswer | RefusalAnswer | undefined,
 	levelCount: number,
+	rejectOutOfRange: boolean,
 ): number {
 	if (answer === undefined) {
 		fail(context, 'The model returned no answer for this route');
@@ -161,7 +172,18 @@ function resolveScoreRoute(
 	if (answer.type === 'refusal') {
 		fail(context, 'The model refused to answer the route question');
 	}
-	return nearestLevel(answer.score, levelCount);
+	const score = answer.score;
+	if (typeof score !== 'number' || !Number.isFinite(score)) {
+		fail(context, 'The model returned a score that is not a number');
+	}
+	if (rejectOutOfRange && (score < -0.5 || score > levelCount - 0.5)) {
+		fail(
+			context,
+			`The model returned score ${score} for ${levelCount} levels`,
+			`Scores run from level 0 to level ${levelCount - 1}. This score falls outside that range, so the node stops instead of routing to the nearest end.`,
+		);
+	}
+	return nearestLevel(score, levelCount);
 }
 
 function buildQuestions(
@@ -276,8 +298,9 @@ export class Decisions implements INodeType {
 			() => [],
 		);
 
-		const credentials = (await this.getCredentials(CREDENTIAL_NAME)) as { provider?: unknown };
-		const allowArrayQuestions = usesOpenAiFormat(credentials);
+		const credentials = (await this.getCredentials(CREDENTIAL_NAME)) as DecisionsCredentials;
+		const isOpenAi = usesOpenAiFormat(credentials);
+		const allowArrayQuestions = isOpenAi;
 
 		const processItem = async (itemIndex: number, includeOtherFields: boolean): Promise<void> => {
 			const item = items[itemIndex];
@@ -326,6 +349,7 @@ export class Decisions implements INodeType {
 							context,
 							answer as ScoreAnswer | RefusalAnswer | undefined,
 							levelCount,
+							isOpenAi,
 						)
 					: resolveChoiceRoute(
 							this,

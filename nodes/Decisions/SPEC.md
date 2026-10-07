@@ -398,6 +398,11 @@ the response back:
 A **Using Raw JSON** value that is already an array of OpenAI questions is
 sent unchanged.
 
+There is no image support: a state that looks like an array of OpenAI
+messages is an error; any other object or array state is sent as its
+`JSON.stringify` form. A converted question with empty instructions is an
+error.
+
 ---
 
 ## 7. Validation
@@ -450,12 +455,19 @@ With the `openai` provider the following differences apply:
 1. A predicate answer keeps OpenAI's key `probability`, e.g.
    `{ "probability": 0.95 }` when simplified.
 2. `answers` are still keyed by question ID: the node builds the map from
-   OpenAI's answers array using each entry's `name`.
-3. A question the model declines comes back as a `refusal` answer. It is
+   OpenAI's answers array using each entry's `name`, falling back to the
+   order the questions were sent when an entry has none. An answer without
+   a usable name, a duplicated name, or a count that does not match the
+   questions sent is an error.
+3. A refusal answer comes back as a `refusal` answer. It is
    output as `{ "type": "refusal" }` even when simplified — an explicit
    exception to §8.1 rule 4, since a refusal has no value and the type is
    the only thing that tells it apart.
-4. `model` is the ID OpenAI reports when it reports one, and otherwise falls
+4. A score answer is routed to its nearest level per §8.3 rule 8, except
+   that a score outside the levels' range is an error rather than going to
+   the nearest end. The 0-based scale is assumed but not yet verified
+   against the live API.
+5. `model` is the ID OpenAI reports when it reports one, and otherwise falls
    back to the requested model ID.
 
 ### 8.2 Evaluate, raw (Simplify off)

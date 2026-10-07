@@ -63,7 +63,7 @@ export class DecisionsApi implements ICredentialType {
 			default: '',
 			placeholder: 'e.g. /api/alpha/decisions',
 			description:
-				"Leave blank to use the default for your provider: '/v1/systemone' for TypeSafe AI and custom, '/api/alpha/decisions' for OpenRouter, '/v1/decisions' for OpenAI",
+				"Leave blank to use the default for your provider: '/v1/systemone' for TypeSafe AI and custom providers with the SystemOne style, '/api/alpha/decisions' for OpenRouter, '/v1/decisions' for OpenAI and custom providers with the OpenAI style",
 		},
 		{
 			displayName: 'API Style',
