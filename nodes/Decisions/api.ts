@@ -128,7 +128,7 @@ export interface ChoiceAnswer {
 	type: 'choice';
 	choice: string;
 	confidence?: number;
-	probabilities?: Record<string, number>;
+	probabilities?: Record<string, number> | IDataObject[];
 }
 
 export interface NoulAnswer {
@@ -141,10 +141,19 @@ export interface ScoreAnswer {
 	score: number;
 	confidence?: number;
 	legend?: Record<string, string>;
-	probabilities?: Record<string, number>;
+	probabilities?: Record<string, number> | IDataObject[];
 }
 
-export type Answer = ChoiceAnswer | NoulAnswer | ScoreAnswer;
+export interface PredicateAnswer {
+	type: 'predicate';
+	probability: number;
+}
+
+export interface RefusalAnswer {
+	type: 'refusal';
+}
+
+export type Answer = ChoiceAnswer | NoulAnswer | ScoreAnswer | PredicateAnswer | RefusalAnswer;
 
 export interface DecisionsResponse {
 	model: string;

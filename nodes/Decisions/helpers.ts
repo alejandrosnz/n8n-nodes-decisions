@@ -178,6 +178,13 @@ export function nearestLevel(score: number, levelCount: number): number {
 
 /** The answer's own value and confidence, under the API's field names */
 export function simplifyAnswer(answer: Answer): IDataObject {
+	if (answer.type === 'predicate') {
+		return { probability: answer.probability };
+	}
+	if (answer.type === 'refusal') {
+		// A refusal has no value, so the type is the only thing that tells it apart
+		return { type: 'refusal' };
+	}
 	if (answer.type === 'noul') {
 		return { noul: answer.noul };
 	}
