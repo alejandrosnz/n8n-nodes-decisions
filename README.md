@@ -1,22 +1,25 @@
 # n8n-nodes-decisions
 
-This n8n community node lets your workflows call a Decisions-compatible API: TypeSafe AI's [System One models](https://docs.typesafe.ai/concepts/system-one), the same capability through OpenRouter, or OpenAI's Decisions API (beta). You give the model a [state](https://docs.typesafe.ai/concepts/state), which is the content you want judged, plus typed questions about it. The model returns a structured answer to each question, with probabilities.
+An [n8n](https://n8n.io/) community node for working with **Decisions-compatible APIs**.
 
-The node has two operations. **Evaluate** adds the answers to each item. **Route** picks an output for each item based on the answer to one question.
+It lets your n8n workflows evaluate content using AI models and receive **structured answers with probabilities**, making it possible to build reliable decision-making and routing workflows.
 
-Based on [typesafe-ai/n8n-nodes-typesafe-ai](https://github.com/typesafe-ai/n8n-nodes-typesafe-ai).
+### Supported APIs
 
-[n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/choose-n8n/faircode-license/) workflow automation platform.
+- **TypeSafe AI** — [System One models](https://docs.typesafe.ai/concepts/system-one)
+- **OpenRouter** — access compatible models through OpenRouter
+- **OpenAI** — OpenAI's **Decisions API** (beta)
 
-[Installation](#installation)
-[Credentials](#credentials)
-[Operations](#operations)
-[Example workflow](#example-workflow)
-[Output](#output)
-[Errors](#errors)
-[Compatibility](#compatibility)
-[Resources](#resources)
-[Version history](#version-history)
+### Operations
+
+The node provides two operations:
+
+- **Evaluate** — evaluates each input item against one or more typed questions and adds the answers to the item.
+- **Route** — evaluates a question and routes each item to an output based on the resulting answer.
+
+You provide the model with a **state** (the content you want it to evaluate) and a set of typed questions describing what you want to know. The model returns a structured answer for each question, including probabilities.
+
+This makes the node useful for tasks such as **classification, content evaluation, decision-making, filtering, and conditional workflow routing**.
 
 ## Installation
 
