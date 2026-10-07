@@ -33,7 +33,7 @@ Add a **Decisions API** credential and pick a **Provider**:
 | OpenAI | Create one in the [OpenAI dashboard](https://platform.openai.com/api-keys) | Built in (`https://api.openai.com`) |
 | Custom (Decisions Compatible) | Your provider key | Enter the provider base URL, e.g. `https://api.custom.com/v1` |
 
-**Endpoint Path** is optional. Leave it blank to use the default for your provider: `/v1/systemone` for TypeSafe AI and custom providers, `/api/alpha/decisions` for OpenRouter, `/v1/decisions` for OpenAI. Set a custom path only if your provider documents a different one.
+**Endpoint Path** is optional. Leave it blank to use the default for your provider: `/v1/systemone` for TypeSafe AI and custom providers, `/api/alpha/decisions` for OpenRouter, `/v1/decisions` for OpenAI. Set a custom path only if your provider documents a different one. A custom provider speaking OpenAI's format should set **API Style** to **OpenAI Decisions**, which also switches its default path to `/v1/decisions`.
 
 n8n checks the key when you save the credential.
 

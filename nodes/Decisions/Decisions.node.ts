@@ -8,7 +8,7 @@ import type {
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import type { Answer, ChoiceAnswer, NoulAnswer, PredicateAnswer, RefusalAnswer, ScoreAnswer } from './api';
-import { CREDENTIAL_NAME, evaluateState } from './api';
+import { CREDENTIAL_NAME, evaluateState, usesOpenAiFormat } from './api';
 import { decisionsProperties } from './descriptions';
 import type { CriteriaEntry, ItemContext, LevelEntry, QuestionEntry } from './helpers';
 import {
@@ -277,7 +277,7 @@ export class Decisions implements INodeType {
 		);
 
 		const credentials = (await this.getCredentials(CREDENTIAL_NAME)) as { provider?: unknown };
-		const allowArrayQuestions = credentials.provider === 'openai';
+		const allowArrayQuestions = usesOpenAiFormat(credentials);
 
 		const processItem = async (itemIndex: number, includeOtherFields: boolean): Promise<void> => {
 			const item = items[itemIndex];

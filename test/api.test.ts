@@ -11,6 +11,7 @@ import {
 	OPENROUTER_BASE_URL,
 	resolveBaseUrl,
 	resolveEndpointPath,
+	usesOpenAiFormat,
 } from '../nodes/Decisions/api';
 
 describe('resolveBaseUrl', () => {
@@ -89,6 +90,14 @@ describe('resolveEndpointPath', () => {
 		);
 	});
 
+	it.each([
+		[{ provider: 'custom', baseUrl: 'https://api.custom.com', apiStyle: 'openai' }, '/v1/decisions'],
+		[{ provider: 'custom', baseUrl: 'https://api.custom.com', apiStyle: 'systemone' }, '/v1/systemone'],
+		[{ provider: 'custom', baseUrl: 'https://api.custom.com' }, '/v1/systemone'],
+	])('resolves a custom endpoint path default of %j to %s', (credentials, expected) => {
+		expect(resolveEndpointPath({ ...credentials, endpointPath: '' })).toBe(expected);
+	});
+
 	it('uses a custom path when one is given', () => {
 		expect(
 			resolveEndpointPath({ provider: 'openrouter', endpointPath: 'custom/path' }),
@@ -117,6 +126,20 @@ describe('resolveEndpointPath', () => {
 		expect(() => resolveEndpointPath({ provider: 'typesafe', endpointPath: path })).toThrow(
 			/'Endpoint Path'/,
 		);
+	});
+});
+
+describe('usesOpenAiFormat', () => {
+	it.each([
+		[{ provider: 'openai' }, true],
+		[{ provider: 'custom', apiStyle: 'openai' }, true],
+		[{ provider: 'custom', apiStyle: 'systemone' }, false],
+		[{ provider: 'custom' }, false],
+		[{ provider: 'typesafe' }, false],
+		[{ provider: 'openrouter' }, false],
+		[{}, false],
+	])('reports %j as %s', (credentials, expected) => {
+		expect(usesOpenAiFormat(credentials)).toBe(expected);
 	});
 });
 

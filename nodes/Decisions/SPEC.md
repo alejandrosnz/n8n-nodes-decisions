@@ -79,6 +79,7 @@ carry the node's light and dark icons.
 | API Key | yes, masked | yes | — | Bearer token for the API |
 | Base URL | only for `custom` | for `custom` | — | Host the node calls for a custom provider |
 | Endpoint Path | yes | no | blank | Path the node calls; blank means the provider default |
+| API Style | only for `custom` | for `custom` | `systemone` | `systemone` or `openai`: the API format a custom provider speaks |
 
 1. The API key MUST be stored and displayed as a password field.
 2. The effective host is `https://api.typesafe.ai` for the `typesafe`
@@ -90,7 +91,8 @@ carry the node's light and dark icons.
    except `http` on localhost for local development.
 3. The effective path is **Endpoint Path** when non-blank, otherwise the
    provider default: `/v1/systemone` for TypeSafe AI and custom providers,
-   `/api/alpha/decisions` for OpenRouter, `/v1/decisions` for OpenAI. A non-blank value MUST be a plain
+   `/api/alpha/decisions` for OpenRouter, `/v1/decisions` for OpenAI and for
+   a custom provider with the OpenAI style. A non-blank value MUST be a plain
    path: a leading slash is added when missing, duplicate slashes are
    collapsed, and absolute URLs, `.`/`..` segments, queries and fragments are
    errors.
@@ -379,7 +381,8 @@ exactly as for a Noul question in §6.1. For a Score, its `criteria` are the
 
 ### 6.3 OpenAI request
 
-With the `openai` provider the node translates its request into OpenAI's
+With the `openai` provider — or a `custom` provider with the OpenAI style —
+the node translates its request into OpenAI's
 Decisions format (`POST {host}/v1/decisions`) before sending, and translates
 the response back:
 

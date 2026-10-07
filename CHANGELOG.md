@@ -11,6 +11,7 @@ package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - OpenAI provider in the Decisions API credential.
 - Translation of requests and responses to OpenAI's Decisions API beta.
 - Support for `predicate` and `refusal` answers.
+- API Style in the credential, so a custom provider can speak OpenAI's Decisions format.
 
 ## 0.1.0
 

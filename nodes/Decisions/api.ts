@@ -24,6 +24,21 @@ export interface DecisionsCredentials {
 	apiKey?: unknown;
 	baseUrl?: unknown;
 	endpointPath?: unknown;
+	apiStyle?: unknown;
+}
+
+export type DecisionsApiStyle = 'systemone' | 'openai';
+
+/** Whether requests use OpenAI's Decisions format: the OpenAI provider, or a custom provider with the OpenAI style. */
+export function usesOpenAiFormat(credentials: DecisionsCredentials = {}): boolean {
+	const provider = normalizeProvider(credentials.provider);
+	if (provider === 'openai') {
+		return true;
+	}
+	if (provider === 'custom') {
+		return credentials.apiStyle === 'openai';
+	}
+	return false;
 }
 
 /** Limits the API itself imposes on a question's criteria */
@@ -114,11 +129,14 @@ export function resolveEndpointPath(credentials: DecisionsCredentials = {}): str
 		}
 		return `/${segments.join('/')}`;
 	}
-	return normalizeProvider(credentials.provider) === 'openrouter'
-		? DEFAULT_DECISIONS_PATH
-		: normalizeProvider(credentials.provider) === 'openai'
-			? DEFAULT_OPENAI_DECISIONS_PATH
-			: DEFAULT_SYSTEMONE_PATH;
+	const provider = normalizeProvider(credentials.provider);
+	if (provider === 'openrouter') {
+		return DEFAULT_DECISIONS_PATH;
+	}
+	if (usesOpenAiFormat(credentials)) {
+		return DEFAULT_OPENAI_DECISIONS_PATH;
+	}
+	return DEFAULT_SYSTEMONE_PATH;
 }
 
 /** The same base URL resolution as resolveBaseUrl, for the declarative credential test */
@@ -232,7 +250,7 @@ export async function evaluateState(
 	timeout: number,
 ): Promise<DecisionsResponse> {
 	const credentials = (await context.getCredentials(CREDENTIAL_NAME)) as DecisionsCredentials;
-	const isOpenAi = normalizeProvider(credentials.provider) === 'openai';
+	const isOpenAi = usesOpenAiFormat(credentials);
 	const response = await apiRequest(
 		context,
 		{

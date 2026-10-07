@@ -65,6 +65,20 @@ export class DecisionsApi implements ICredentialType {
 			description:
 				"Leave blank to use the default for your provider: '/v1/systemone' for TypeSafe AI and custom, '/api/alpha/decisions' for OpenRouter, '/v1/decisions' for OpenAI",
 		},
+		{
+			displayName: 'API Style',
+			name: 'apiStyle',
+			type: 'options',
+			options: [
+				{ name: 'SystemOne', value: 'systemone' },
+				{ name: 'OpenAI Decisions', value: 'openai' },
+			],
+			default: 'systemone',
+			required: true,
+			description:
+				'The API format your provider speaks. Use OpenAI Decisions for OpenAI-compatible endpoints.',
+			displayOptions: { show: { provider: ['custom'] } },
+		},
 	];
 
 	authenticate: IAuthenticateGeneric = {

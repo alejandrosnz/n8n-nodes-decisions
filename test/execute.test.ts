@@ -808,6 +808,32 @@ describe('OpenAI', () => {
 		);
 	});
 
+	it('translates for a custom provider with the OpenAI style', async () => {
+		const { functions, request } = createFunctions(
+			openAiEvaluateParameters,
+			items,
+			openAiEvaluateResponse,
+			false,
+			{ provider: 'custom', apiKey: 'k', baseUrl: 'https://api.custom.com', apiStyle: 'openai' },
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		const [, options] = request.mock.calls[0] as unknown as [
+			unknown,
+			{ url: string; body: unknown },
+		];
+		expect(options.url).toBe('https://api.custom.com/v1/decisions');
+		expect(options.body).toMatchObject({
+			input: 'I was charged twice for my order.',
+			questions: expect.arrayContaining([
+				expect.objectContaining({ type: 'predicate', name: 'is_urgent' }),
+			]),
+		});
+		expect(outputs[0][0].json).toMatchObject({
+			answers: { is_urgent: { probability: 0.9 } },
+		});
+	});
+
 	it('reports an OpenAI error message', async () => {
 		const { functions } = createFunctions(
 			openAiEvaluateParameters,
