@@ -163,10 +163,22 @@ export function buildQuestionsFromEntries(
 	return questions;
 }
 
-export function parseQuestionsJson(context: ItemContext, raw: unknown): IDataObject {
+export function parseQuestionsJson(
+	context: ItemContext,
+	raw: unknown,
+	allowArray = false,
+): IDataObject | IDataObject[] {
 	const parsed = parseJsonParameter(context, raw, 'Questions');
+	if (allowArray && Array.isArray(parsed)) {
+		return parsed as IDataObject[];
+	}
 	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-		fail(context, "'Questions' must be a JSON object keyed by question ID");
+		fail(
+			context,
+			allowArray
+				? "'Questions' must be a JSON object keyed by question ID, or an array of OpenAI questions"
+				: "'Questions' must be a JSON object keyed by question ID",
+		);
 	}
 	return parsed as IDataObject;
 }
@@ -178,6 +190,13 @@ export function nearestLevel(score: number, levelCount: number): number {
 
 /** The answer's own value and confidence, under the API's field names */
 export function simplifyAnswer(answer: Answer): IDataObject {
+	if (answer.type === 'predicate') {
+		return { probability: answer.probability };
+	}
+	if (answer.type === 'refusal') {
+		// A refusal has no value, so the type is the only thing that tells it apart
+		return { type: 'refusal' };
+	}
 	if (answer.type === 'noul') {
 		return { noul: answer.noul };
 	}

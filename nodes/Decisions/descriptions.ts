@@ -28,7 +28,11 @@ const questionEntryFields: INodeProperties[] = [
 		default: 'noul',
 		options: [
 			{ name: 'Choice', value: 'choice', description: 'Pick one from a list of options' },
-			{ name: 'Noul (Yes/No)', value: 'noul', description: 'Return the probability of yes' },
+			{
+				name: 'Noul (Yes/No)',
+				value: 'noul',
+				description: 'Return the probability of yes. Sent as a predicate question to OpenAI.',
+			},
 			{ name: 'Score', value: 'score', description: 'Rate against semantically defined levels' },
 		],
 	},
@@ -220,7 +224,7 @@ export const decisionsProperties: INodeProperties[] = [
 		required: true,
 		default: '',
 		placeholder: 'e.g. jev-latest',
-		description: 'The model ID to evaluate with, e.g. jev-latest',
+		description: 'The model ID to evaluate with, e.g. jev-latest, or gpt-6-luna for OpenAI',
 	},
 	{
 		displayName: 'State Format',

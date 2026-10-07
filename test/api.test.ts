@@ -4,11 +4,14 @@ import {
 	BASE_URL_EXPRESSION,
 	DEFAULT_BASE_URL,
 	DEFAULT_DECISIONS_PATH,
+	DEFAULT_OPENAI_DECISIONS_PATH,
 	DEFAULT_SYSTEMONE_PATH,
 	describeApiError,
+	OPENAI_BASE_URL,
 	OPENROUTER_BASE_URL,
 	resolveBaseUrl,
 	resolveEndpointPath,
+	usesOpenAiFormat,
 } from '../nodes/Decisions/api';
 
 describe('resolveBaseUrl', () => {
@@ -19,22 +22,27 @@ describe('resolveBaseUrl', () => {
 		[{ provider: 'typesafe', baseUrl: '  https://eu.example.com///  ' }, 'https://eu.example.com'],
 		[{ provider: 'openrouter' }, 'https://openrouter.ai'],
 		[{ provider: 'openrouter', baseUrl: '' }, 'https://openrouter.ai'],
+		[{ provider: 'openai' }, 'https://api.openai.com'],
+		[{ provider: 'openai', baseUrl: '' }, 'https://api.openai.com'],
+		[{ provider: 'openai', baseUrl: 'https://eu.api.openai.com/' }, 'https://eu.api.openai.com'],
 		[{ provider: 'custom', baseUrl: 'https://api.custom.com/v1/' }, 'https://api.custom.com/v1'],
 	])('resolves %j', (credentials, expected) => {
 		expect(resolveBaseUrl(credentials)).toBe(expected);
 	});
 
 	it('rejects a custom provider without a base URL', () => {
-		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: '  ' })).toThrow(/'Base URL' is empty/);
+		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: '  ' })).toThrow(
+			/'Base URL' is empty/,
+		);
 	});
 
 	it('rejects non-https base URLs', () => {
-		expect(() => resolveBaseUrl({ provider: 'custom', baseUrl: 'http://api.custom.com/v1' })).toThrow(
-			/must use https/,
-		);
-		expect(() => resolveBaseUrl({ provider: 'typesafe', baseUrl: 'http://eu.example.com' })).toThrow(
-			/must use https/,
-		);
+		expect(() =>
+			resolveBaseUrl({ provider: 'custom', baseUrl: 'http://api.custom.com/v1' }),
+		).toThrow(/must use https/);
+		expect(() =>
+			resolveBaseUrl({ provider: 'typesafe', baseUrl: 'http://eu.example.com' }),
+		).toThrow(/must use https/);
 	});
 
 	it('rejects base URLs that are not valid URLs', () => {
@@ -67,10 +75,38 @@ describe('resolveEndpointPath', () => {
 		);
 	});
 
+	it.each([
+		[{ provider: 'openai', endpointPath: '' }, '/v1/decisions'],
+		[{ provider: 'openai', endpointPath: '/v2/x' }, '/v2/x'],
+	])('resolves OpenAI endpoint path %j', (credentials, expected) => {
+		expect(resolveEndpointPath(credentials)).toBe(expected);
+	});
+
+	it('uses the OpenAI default path constant', () => {
+		expect(DEFAULT_OPENAI_DECISIONS_PATH).toBe('/v1/decisions');
+		expect(resolveEndpointPath({ provider: 'openai', endpointPath: '' })).toBe(
+			DEFAULT_OPENAI_DECISIONS_PATH,
+		);
+	});
+
+	it.each([
+		[
+			{ provider: 'custom', baseUrl: 'https://api.custom.com', apiStyle: 'openai' },
+			'/v1/decisions',
+		],
+		[
+			{ provider: 'custom', baseUrl: 'https://api.custom.com', apiStyle: 'systemone' },
+			'/v1/systemone',
+		],
+		[{ provider: 'custom', baseUrl: 'https://api.custom.com' }, '/v1/systemone'],
+	])('resolves a custom endpoint path default of %j to %s', (credentials, expected) => {
+		expect(resolveEndpointPath({ ...credentials, endpointPath: '' })).toBe(expected);
+	});
+
 	it('uses a custom path when one is given', () => {
-		expect(
-			resolveEndpointPath({ provider: 'openrouter', endpointPath: 'custom/path' }),
-		).toBe('/custom/path');
+		expect(resolveEndpointPath({ provider: 'openrouter', endpointPath: 'custom/path' })).toBe(
+			'/custom/path',
+		);
 		expect(
 			resolveEndpointPath({ provider: 'typesafe', endpointPath: '/api/alpha/decisions' }),
 		).toBe('/api/alpha/decisions');
@@ -98,11 +134,27 @@ describe('resolveEndpointPath', () => {
 	});
 });
 
+describe('usesOpenAiFormat', () => {
+	it.each([
+		[{ provider: 'openai' }, true],
+		[{ provider: 'custom', apiStyle: 'openai' }, true],
+		[{ provider: 'custom', apiStyle: 'systemone' }, false],
+		[{ provider: 'custom' }, false],
+		[{ provider: 'typesafe' }, false],
+		[{ provider: 'openrouter' }, false],
+		[{}, false],
+	])('reports %j as %s', (credentials, expected) => {
+		expect(usesOpenAiFormat(credentials)).toBe(expected);
+	});
+});
+
 describe('BASE_URL_EXPRESSION', () => {
 	it('interpolates the default hosts rather than shipping a placeholder', () => {
 		expect(BASE_URL_EXPRESSION).not.toContain('${');
 		expect(BASE_URL_EXPRESSION).toContain(DEFAULT_BASE_URL);
 		expect(BASE_URL_EXPRESSION).toContain(OPENROUTER_BASE_URL);
+		expect(BASE_URL_EXPRESSION).toContain(OPENAI_BASE_URL);
+		expect(BASE_URL_EXPRESSION).toContain('https://api.openai.com');
 	});
 });
 
@@ -126,6 +178,12 @@ describe('describeApiError', () => {
 
 	it('uses a plain text body that did not parse as JSON', () => {
 		expect(describeApiError('  Upstream connect error  ', 502)).toBe('Upstream connect error');
+	});
+
+	it('uses the OpenAI error message', () => {
+		expect(describeApiError({ error: { message: 'Invalid API key' } }, 401)).toBe(
+			'Invalid API key',
+		);
 	});
 
 	it.each([undefined, '', '   ', '<html><body>502 Bad Gateway</body></html>'])(

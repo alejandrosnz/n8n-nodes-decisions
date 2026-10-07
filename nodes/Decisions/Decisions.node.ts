@@ -7,8 +7,16 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-import type { Answer, ChoiceAnswer, NoulAnswer, ScoreAnswer } from './api';
-import { CREDENTIAL_NAME, evaluateState } from './api';
+import type {
+	Answer,
+	ChoiceAnswer,
+	DecisionsCredentials,
+	NoulAnswer,
+	PredicateAnswer,
+	RefusalAnswer,
+	ScoreAnswer,
+} from './api';
+import { CREDENTIAL_NAME, evaluateState, usesOpenAiFormat } from './api';
 import { decisionsProperties } from './descriptions';
 import type { CriteriaEntry, ItemContext, LevelEntry, QuestionEntry } from './helpers';
 import {
@@ -107,11 +115,14 @@ function readThresholds(
 function resolveChoiceRoute(
 	functions: IExecuteFunctions,
 	context: ItemContext,
-	answer: ChoiceAnswer | undefined,
+	answer: ChoiceAnswer | RefusalAnswer | undefined,
 	routeNames: string[],
 	separateLowConfidence: boolean,
 ): number {
-	const chosen = answer?.choice ?? '';
+	if (answer?.type === 'refusal') {
+		fail(context, 'The model refused to answer the route question');
+	}
+	const chosen = String(answer?.choice ?? '');
 	const targetIndex = routeNames.indexOf(chosen);
 	if (targetIndex === -1) {
 		fail(context, `The model answered "${chosen}", which is not one of the configured routes`);
@@ -126,39 +137,61 @@ function resolveChoiceRoute(
 function resolveNoulRoute(
 	functions: IExecuteFunctions,
 	context: ItemContext,
-	answer: NoulAnswer | undefined,
+	answer: NoulAnswer | PredicateAnswer | RefusalAnswer | undefined,
 	hasUncertain: boolean,
 ): number {
 	if (answer === undefined) {
 		fail(context, 'The model returned no answer for this route');
 	}
+	if (answer.type === 'refusal') {
+		fail(context, 'The model refused to answer the route question');
+	}
+	const probability = answer.type === 'predicate' ? answer.probability : answer.noul;
 	const { trueThreshold, falseThreshold } = readThresholds(functions, context);
-	if (answer.noul >= trueThreshold) {
+	if (probability >= trueThreshold) {
 		return 0;
 	}
-	if (answer.noul <= falseThreshold) {
+	if (probability <= falseThreshold) {
 		return 1;
 	}
 	return hasUncertain ? 2 : 1;
 }
 
-/** The index of the output a Score answer routes to: its nearest level */
+/** The index of the output a Score answer routes to: its nearest level.
+ * With `rejectOutOfRange` a score outside the levels is an error instead of
+ * going to the nearest end, so an unverified score scale cannot misroute. */
 function resolveScoreRoute(
 	context: ItemContext,
-	answer: ScoreAnswer | undefined,
+	answer: ScoreAnswer | RefusalAnswer | undefined,
 	levelCount: number,
+	rejectOutOfRange: boolean,
 ): number {
 	if (answer === undefined) {
 		fail(context, 'The model returned no answer for this route');
 	}
-	return nearestLevel(answer.score, levelCount);
+	if (answer.type === 'refusal') {
+		fail(context, 'The model refused to answer the route question');
+	}
+	const score = answer.score;
+	if (typeof score !== 'number' || !Number.isFinite(score)) {
+		fail(context, 'The model returned a score that is not a number');
+	}
+	if (rejectOutOfRange && (score < -0.5 || score > levelCount - 0.5)) {
+		fail(
+			context,
+			`The model returned score ${score} for ${levelCount} levels`,
+			`Scores run from level 0 to level ${levelCount - 1}. This score falls outside that range, so the node stops instead of routing to the nearest end.`,
+		);
+	}
+	return nearestLevel(score, levelCount);
 }
 
 function buildQuestions(
 	functions: IExecuteFunctions,
 	context: ItemContext,
 	operation: string,
-): IDataObject {
+	allowArray: boolean,
+): IDataObject | IDataObject[] {
 	const { itemIndex } = context;
 	if (operation === 'route') {
 		const instructions = (
@@ -201,7 +234,11 @@ function buildQuestions(
 		};
 	}
 	if ((functions.getNodeParameter('questionsFormat', itemIndex) as string) === 'json') {
-		return parseQuestionsJson(context, functions.getNodeParameter('questionsJson', itemIndex));
+		return parseQuestionsJson(
+			context,
+			functions.getNodeParameter('questionsJson', itemIndex),
+			allowArray,
+		);
 	}
 	return buildQuestionsFromEntries(
 		context,
@@ -261,6 +298,9 @@ export class Decisions implements INodeType {
 			() => [],
 		);
 
+		const credentials = (await this.getCredentials(CREDENTIAL_NAME)) as DecisionsCredentials;
+		const isOpenAi = usesOpenAiFormat(credentials);
+
 		const processItem = async (itemIndex: number, includeOtherFields: boolean): Promise<void> => {
 			const item = items[itemIndex];
 			const context: ItemContext = { node, itemIndex };
@@ -271,7 +311,7 @@ export class Decisions implements INodeType {
 				{
 					state: buildState(this, context, item),
 					model: readModel(this, context),
-					questions: buildQuestions(this, context, operation),
+					questions: buildQuestions(this, context, operation, isOpenAi),
 				} as IDataObject,
 				this.getNodeParameter('options.timeout', itemIndex, 5000) as number,
 			);
@@ -297,13 +337,23 @@ export class Decisions implements INodeType {
 						? simplifyAnswer(answer)
 						: (answer as unknown as IDataObject);
 			const targetIndex = isNoul
-				? resolveNoulRoute(this, context, answer as NoulAnswer | undefined, hasUncertain)
+				? resolveNoulRoute(
+						this,
+						context,
+						answer as NoulAnswer | PredicateAnswer | RefusalAnswer | undefined,
+						hasUncertain,
+					)
 				: isScore
-					? resolveScoreRoute(context, answer as ScoreAnswer | undefined, levelCount)
+					? resolveScoreRoute(
+							context,
+							answer as ScoreAnswer | RefusalAnswer | undefined,
+							levelCount,
+							isOpenAi,
+						)
 					: resolveChoiceRoute(
 							this,
 							context,
-							answer as ChoiceAnswer | undefined,
+							answer as ChoiceAnswer | RefusalAnswer | undefined,
 							routeNames,
 							separateLowConfidence,
 						);

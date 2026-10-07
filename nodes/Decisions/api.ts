@@ -1,25 +1,39 @@
-import type {
-	IDataObject,
-	IExecuteFunctions,
-	IHttpRequestMethods,
-	JsonObject,
-} from 'n8n-workflow';
-import { NodeApiError } from 'n8n-workflow';
+import type { IDataObject, IExecuteFunctions, IHttpRequestMethods, JsonObject } from 'n8n-workflow';
+import { NodeApiError, NodeOperationError } from 'n8n-workflow';
+
+import { fromOpenAiResponse, toOpenAiRequest } from './openai';
 
 export const CREDENTIAL_NAME = 'decisionsApi';
 export const DEFAULT_BASE_URL = 'https://api.typesafe.ai';
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai';
+export const OPENAI_BASE_URL = 'https://api.openai.com';
 
 export const DEFAULT_SYSTEMONE_PATH = '/v1/systemone';
 export const DEFAULT_DECISIONS_PATH = '/api/alpha/decisions';
+export const DEFAULT_OPENAI_DECISIONS_PATH = '/v1/decisions';
 
-export type DecisionsProvider = 'typesafe' | 'openrouter' | 'custom';
+export type DecisionsProvider = 'typesafe' | 'openrouter' | 'openai' | 'custom';
 
 export interface DecisionsCredentials {
 	provider?: unknown;
 	apiKey?: unknown;
 	baseUrl?: unknown;
 	endpointPath?: unknown;
+	apiStyle?: unknown;
+}
+
+export type DecisionsApiStyle = 'systemone' | 'openai';
+
+/** Whether requests use OpenAI's Decisions format: the OpenAI provider, or a custom provider with the OpenAI style. */
+export function usesOpenAiFormat(credentials: DecisionsCredentials = {}): boolean {
+	const provider = normalizeProvider(credentials.provider);
+	if (provider === 'openai') {
+		return true;
+	}
+	if (provider === 'custom') {
+		return credentials.apiStyle === 'openai';
+	}
+	return false;
 }
 
 /** Limits the API itself imposes on a question's criteria */
@@ -27,7 +41,7 @@ export const OPTION_BOUNDS = { min: 2, max: 255 };
 export const LEVEL_BOUNDS = { min: 2, max: 10 };
 
 function normalizeProvider(raw: unknown): DecisionsProvider {
-	if (raw === 'openrouter' || raw === 'custom' || raw === 'typesafe') {
+	if (raw === 'openrouter' || raw === 'custom' || raw === 'typesafe' || raw === 'openai') {
 		return raw;
 	}
 	return 'typesafe';
@@ -58,10 +72,17 @@ function normalizeBaseUrl(raw: unknown): string {
 	const stripped = stripTrailingSlashes(trimmed);
 	const parsed = parseBaseUrl(stripped);
 	if (parsed === null) {
-		throw new Error("'Base URL' is not a valid URL. Use an https URL such as https://api.custom.com/v1.");
+		throw new Error(
+			"'Base URL' is not a valid URL. Use an https URL such as https://api.custom.com/v1.",
+		);
 	}
-	if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocalhost(parsed.hostname))) {
-		throw new Error("'Base URL' must use https. Use an https URL such as https://api.custom.com/v1.");
+	if (
+		parsed.protocol !== 'https:' &&
+		!(parsed.protocol === 'http:' && isLocalhost(parsed.hostname))
+	) {
+		throw new Error(
+			"'Base URL' must use https. Use an https URL such as https://api.custom.com/v1.",
+		);
 	}
 	return stripped;
 }
@@ -74,6 +95,13 @@ export function resolveBaseUrl(credentials: DecisionsCredentials = {}): string {
 			return normalizeBaseUrl(custom);
 		}
 		return OPENROUTER_BASE_URL;
+	}
+	if (provider === 'openai') {
+		const custom = typeof credentials.baseUrl === 'string' ? credentials.baseUrl.trim() : '';
+		if (custom !== '') {
+			return normalizeBaseUrl(custom);
+		}
+		return OPENAI_BASE_URL;
 	}
 	if (provider === 'custom') {
 		return normalizeBaseUrl(credentials.baseUrl);
@@ -95,7 +123,9 @@ export function resolveEndpointPath(credentials: DecisionsCredentials = {}): str
 		}
 		const normalized = path.startsWith('/') ? path : `/${path}`;
 		if (normalized.includes('?') || normalized.includes('#')) {
-			throw new Error("'Endpoint Path' must be a path such as /v1/systemone, without query or fragment.");
+			throw new Error(
+				"'Endpoint Path' must be a path such as /v1/systemone, without query or fragment.",
+			);
 		}
 		const segments = normalized.split('/').filter((segment) => segment !== '');
 		if (segments.length === 0 || segments.includes('..') || segments.includes('.')) {
@@ -103,13 +133,18 @@ export function resolveEndpointPath(credentials: DecisionsCredentials = {}): str
 		}
 		return `/${segments.join('/')}`;
 	}
-	return normalizeProvider(credentials.provider) === 'openrouter'
-		? DEFAULT_DECISIONS_PATH
-		: DEFAULT_SYSTEMONE_PATH;
+	const provider = normalizeProvider(credentials.provider);
+	if (provider === 'openrouter') {
+		return DEFAULT_DECISIONS_PATH;
+	}
+	if (usesOpenAiFormat(credentials)) {
+		return DEFAULT_OPENAI_DECISIONS_PATH;
+	}
+	return DEFAULT_SYSTEMONE_PATH;
 }
 
 /** The same base URL resolution as resolveBaseUrl, for the declarative credential test */
-export const BASE_URL_EXPRESSION = `={{ $credentials.baseUrl || ($credentials.provider === 'openrouter' ? '${OPENROUTER_BASE_URL}' : '${DEFAULT_BASE_URL}') }}`;
+export const BASE_URL_EXPRESSION = `={{ $credentials.baseUrl || ($credentials.provider === 'openrouter' ? '${OPENROUTER_BASE_URL}' : $credentials.provider === 'openai' ? '${OPENAI_BASE_URL}' : '${DEFAULT_BASE_URL}') }}`;
 
 export type QuestionType = 'choice' | 'noul' | 'score';
 
@@ -117,7 +152,7 @@ export interface ChoiceAnswer {
 	type: 'choice';
 	choice: string;
 	confidence?: number;
-	probabilities?: Record<string, number>;
+	probabilities?: Record<string, number> | IDataObject[];
 }
 
 export interface NoulAnswer {
@@ -130,10 +165,19 @@ export interface ScoreAnswer {
 	score: number;
 	confidence?: number;
 	legend?: Record<string, string>;
-	probabilities?: Record<string, number>;
+	probabilities?: Record<string, number> | IDataObject[];
 }
 
-export type Answer = ChoiceAnswer | NoulAnswer | ScoreAnswer;
+export interface PredicateAnswer {
+	type: 'predicate';
+	probability: number;
+}
+
+export interface RefusalAnswer {
+	type: 'refusal';
+}
+
+export type Answer = ChoiceAnswer | NoulAnswer | ScoreAnswer | PredicateAnswer | RefusalAnswer;
 
 export interface DecisionsResponse {
 	model: string;
@@ -162,6 +206,11 @@ export function describeApiError(body: unknown, statusCode: number): string {
 	}
 	if (typeof body === 'string' && body.trim() !== '' && !body.trimStart().startsWith('<')) {
 		return body.trim();
+	}
+	const errorMessage = (body as { error?: { message?: unknown } } | null | undefined)?.error
+		?.message;
+	if (typeof errorMessage === 'string' && errorMessage !== '') {
+		return errorMessage;
 	}
 	return `The Decisions API returned status ${statusCode}`;
 }
@@ -198,6 +247,33 @@ async function apiRequest(
 	return body;
 }
 
+/** The question names in the order they were sent, for matching OpenAI's answers array */
+function sentQuestionNames(questions: unknown): Array<string | null> {
+	if (Array.isArray(questions)) {
+		return questions.map((question) =>
+			typeof (question as IDataObject)?.name === 'string'
+				? ((question as IDataObject).name as string)
+				: null,
+		);
+	}
+	if (typeof questions === 'object' && questions !== null) {
+		return Object.keys(questions);
+	}
+	return [];
+}
+
+/** A translation failure points at the item, so Continue On Fail collects it */
+function toItemError(
+	context: IExecuteFunctions,
+	itemIndex: number,
+	error: unknown,
+): NodeApiError | NodeOperationError {
+	if (error instanceof NodeApiError || error instanceof NodeOperationError) {
+		return error;
+	}
+	return new NodeOperationError(context.getNode(), error as Error, { itemIndex });
+}
+
 export async function evaluateState(
 	context: IExecuteFunctions,
 	itemIndex: number,
@@ -205,15 +281,35 @@ export async function evaluateState(
 	timeout: number,
 ): Promise<DecisionsResponse> {
 	const credentials = (await context.getCredentials(CREDENTIAL_NAME)) as DecisionsCredentials;
+	const isOpenAi = usesOpenAiFormat(credentials);
+	let requestBody = body;
+	if (isOpenAi) {
+		try {
+			requestBody = toOpenAiRequest(body);
+		} catch (error) {
+			throw toItemError(context, itemIndex, error);
+		}
+	}
 	const response = await apiRequest(
 		context,
 		{
 			method: 'POST',
 			path: resolveEndpointPath(credentials),
-			body,
+			body: requestBody,
 			timeout,
 		},
 		itemIndex,
 	);
-	return response as DecisionsResponse;
+	if (!isOpenAi) {
+		return response as DecisionsResponse;
+	}
+	try {
+		return fromOpenAiResponse(
+			response,
+			String(body.model ?? ''),
+			sentQuestionNames(body.questions),
+		);
+	} catch (error) {
+		throw toItemError(context, itemIndex, error);
+	}
 }

@@ -1,6 +1,6 @@
 # n8n-nodes-decisions
 
-This n8n community node lets your workflows call a Decisions-compatible API: TypeSafe AI's [System One models](https://docs.typesafe.ai/concepts/system-one) or the same capability through OpenRouter. You give the model a [state](https://docs.typesafe.ai/concepts/state), which is the content you want judged, plus typed questions about it. The model returns a structured answer to each question, with probabilities.
+This n8n community node lets your workflows call a Decisions-compatible API: TypeSafe AI's [System One models](https://docs.typesafe.ai/concepts/system-one), the same capability through OpenRouter, or OpenAI's Decisions API (beta). You give the model a [state](https://docs.typesafe.ai/concepts/state), which is the content you want judged, plus typed questions about it. The model returns a structured answer to each question, with probabilities.
 
 The node has two operations. **Evaluate** adds the answers to each item. **Route** picks an output for each item based on the answer to one question.
 
@@ -30,9 +30,10 @@ Add a **Decisions API** credential and pick a **Provider**:
 | --- | --- | --- |
 | TypeSafe AI | Create one in the [TypeSafe console](https://console.typesafe.ai/keys) | Built in (`https://api.typesafe.ai`) |
 | OpenRouter | Create one in your [OpenRouter dashboard](https://openrouter.ai) | Built in (`https://openrouter.ai`) |
+| OpenAI | Create one in the [OpenAI dashboard](https://platform.openai.com/api-keys) | Built in (`https://api.openai.com`) |
 | Custom (Decisions Compatible) | Your provider key | Enter the provider base URL, e.g. `https://api.custom.com/v1` |
 
-**Endpoint Path** is optional. Leave it blank to use the default for your provider: `/v1/systemone` for TypeSafe AI and custom providers, `/api/alpha/decisions` for OpenRouter. Set a custom path only if your provider documents a different one.
+**Endpoint Path** is optional. Leave it blank to use the default for your provider: `/v1/systemone` for TypeSafe AI and custom providers, `/api/alpha/decisions` for OpenRouter, `/v1/decisions` for OpenAI. Set a custom path only if your provider documents a different one. A custom provider speaking OpenAI's format should set **API Style** to **OpenAI Decisions**, which also switches its default path to `/v1/decisions`.
 
 n8n checks the key when you save the credential.
 
@@ -40,7 +41,7 @@ n8n checks the key when you save the credential.
 
 Both operations send one request per input item. Each request includes the item's state, the **Model** ID, and the questions.
 
-**Model** is a plain text model ID, e.g. `jev-latest`. The [Models](https://docs.typesafe.ai/models) page describes TypeSafe models and their aliases. For OpenRouter or custom providers, enter the model ID your provider expects. Any OpenRouter model with the decisions output modality should work, e.g. `typesafe/jev-latest`; see the [Decisions models on OpenRouter](https://openrouter.ai/models?output_modalities=decisions).
+**Model** is a plain text model ID, e.g. `jev-latest`. The [Models](https://docs.typesafe.ai/models) page describes TypeSafe models and their aliases. For OpenRouter or custom providers, enter the model ID your provider expects. Any OpenRouter model with the decisions output modality should work, e.g. `typesafe/jev-latest`; see the [Decisions models on OpenRouter](https://openrouter.ai/models?output_modalities=decisions). For OpenAI, use `gpt-6-luna`; see [OpenAI's Decisions guide](https://developers.openai.com/api/docs/guides/decisions).
 
 **State Format** sets where the state comes from:
 
@@ -79,6 +80,8 @@ Each answer goes in `answers`, under its question's **ID**:
 
 When an AI Agent uses the node as a tool, the node runs Evaluate.
 
+With OpenAI, Noul questions are sent as predicate questions and their answer is `probability` instead of `noul`. A question the model declines comes back as `{ "type": "refusal" }`. Raw JSON can also be an array of questions in OpenAI's format.
+
 ### Route
 
 Route asks one question and sends the item to the output that matches the answer. **Question Type** sets the kind of question and the outputs you get:
@@ -95,7 +98,7 @@ Each question type has its own way to add or change outputs:
 - **Noul: Uncertain output.** Both thresholds start at `0.5`, so every item goes to True or False. Set them apart, for example `0.8` and `0.2`, to add an `Uncertain` output for answers that fall between the two.
 - **Score: level boundaries.** Levels are numbered from 0, lowest first. The boundary between two levels is halfway between their numbers. A score from `0.5` to just under `1.5` goes to level 1, and a score exactly on a boundary goes to the higher level.
 
-The `route` field holds the answer in the same form Evaluate uses, and the output the item leaves from shows the decision.
+The `route` field holds the answer in the same form Evaluate uses, and the output the item leaves from shows the decision. If the model refuses the route question, that is a failure, handled as in Errors below — it never routes to a decision output.
 
 ```json
 { "route": { "choice": "billing", "confidence": 0.81 }, "model": "jev-1.13.0" }
@@ -154,6 +157,7 @@ This package is a fork of `typesafe-ai/n8n-nodes-typesafe-ai`, renamed to `n8n-n
 * [TypeSafe AI documentation](https://docs.typesafe.ai)
 * [TypeSafe AI API reference](https://docs.typesafe.ai/api)
 * [OpenRouter documentation](https://openrouter.ai/docs)
+* [OpenAI Decisions guide](https://developers.openai.com/api/docs/guides/decisions)
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
 
 ## Version history

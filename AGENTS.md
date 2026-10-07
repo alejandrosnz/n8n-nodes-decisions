@@ -13,14 +13,14 @@ Based on [typesafe-ai/n8n-nodes-typesafe-ai](https://github.com/typesafe-ai/n8n-
 
 ## Layout
 
-- `nodes/Decisions/` holds the node. `descriptions.ts` has the fields and copy, `Decisions.node.ts` runs the requests and routing, `helpers.ts` builds questions and outputs, and `api.ts` makes the HTTP calls.
-- `credentials/` holds the Decisions API credential with `typesafe`, `openrouter` and `custom` providers.
+- `nodes/Decisions/` holds the node. `descriptions.ts` has the fields and copy, `Decisions.node.ts` runs the requests and routing, `helpers.ts` builds questions and outputs, `api.ts` makes the HTTP calls, and `openai.ts` translates requests and responses for OpenAI.
+- `credentials/` holds the Decisions API credential with `typesafe`, `openrouter`, `openai` and `custom` providers.
 - `nodes/Decisions/SPEC.md` specifies the node's behaviour. Keep it in step with any change to the node.
 - `agents/` holds testing guides copied from the n8n community node starter.
 
 ## Rules
 
-- Answers keep the API's own field names: `noul`, `choice`, `score`, `confidence`. Simplify only drops `type`, `probabilities` and `legend`.
+- Answers keep the API's own field names: `noul`, `probability`, `choice`, `score`, `confidence`. Simplify only drops `type`, `probabilities` and `legend`.
 - Copy follows n8n's UX guidelines: Title Case labels, sentence case descriptions, "e.g." placeholders, and parameter names in single quotes.
 - The README documents the n8n side of the node and links to docs.typesafe.ai for Decisions concepts.
 - All code and comments are written in English.

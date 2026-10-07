@@ -595,12 +595,503 @@ describe('Model', () => {
 	});
 
 	it('rejects an empty model', async () => {
-		const { functions } = createFunctions(
-			{ ...routeParameters, model: '  ' },
-			items,
-			() => choiceResponse('billing', 0.9),
+		const { functions } = createFunctions({ ...routeParameters, model: '  ' }, items, () =>
+			choiceResponse('billing', 0.9),
 		);
 
 		await expect(Decisions.prototype.execute.call(functions)).rejects.toThrow(/'Model' is empty/);
+	});
+});
+
+describe('OpenAI', () => {
+	const openAiCredentials = { provider: 'openai', apiKey: 'k', baseUrl: '' };
+
+	const openAiEvaluateParameters: Record<string, unknown> = {
+		operation: 'evaluate',
+		model: 'gpt-6-luna',
+		stateFormat: 'text',
+		stateText: 'I was charged twice for my order.',
+		questionsFormat: 'fields',
+		'questions.question': [
+			{ id: 'is_urgent', instructions: 'Is it urgent?', type: 'noul' },
+			{
+				id: 'department',
+				instructions: 'Which department?',
+				type: 'choice',
+				choiceOptions: {
+					option: [
+						{ name: 'billing', description: 'Payments' },
+						{ name: 'technical', description: '' },
+					],
+				},
+			},
+		],
+	};
+
+	const openAiEvaluateResponse = () => ({
+		statusCode: 200,
+		body: {
+			answers: [
+				{ type: 'predicate', name: 'is_urgent', probability: 0.9 },
+				{
+					type: 'choice',
+					name: 'department',
+					choice: 'billing',
+					confidence: 0.8,
+					probabilities: [
+						{ value: 'billing', probability: 0.8 },
+						{ value: 'technical', probability: 0.2 },
+					],
+				},
+			],
+		},
+	});
+
+	it('evaluates with simplified OpenAI answers', async () => {
+		const { functions, request } = createFunctions(
+			openAiEvaluateParameters,
+			items,
+			openAiEvaluateResponse,
+			false,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		const [, options] = request.mock.calls[0] as unknown as [unknown, { url: string }];
+		expect(options.url).toBe('https://api.openai.com/v1/decisions');
+
+		const [, { body }] = request.mock.calls[0] as unknown as [unknown, { body: unknown }];
+		expect(body).toEqual({
+			model: 'gpt-6-luna',
+			input: 'I was charged twice for my order.',
+			questions: [
+				{ type: 'predicate', name: 'is_urgent', instructions: 'Is it urgent?' },
+				{
+					type: 'choice',
+					name: 'department',
+					instructions: 'Which department?',
+					choices: [{ value: 'billing', description: 'Payments' }, { value: 'technical' }],
+				},
+			],
+		});
+
+		expect(outputs[0][0].json).toEqual({
+			ticket: 1,
+			answers: {
+				is_urgent: { probability: 0.9 },
+				department: { choice: 'billing', confidence: 0.8 },
+			},
+			model: 'gpt-6-luna',
+		});
+	});
+
+	it('returns OpenAI answers without their names when not simplifying', async () => {
+		const { functions } = createFunctions(
+			{ ...openAiEvaluateParameters, 'options.simplify': false },
+			items,
+			openAiEvaluateResponse,
+			false,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs[0][0].json).toEqual({
+			ticket: 1,
+			answers: {
+				is_urgent: { type: 'predicate', probability: 0.9 },
+				department: {
+					type: 'choice',
+					choice: 'billing',
+					confidence: 0.8,
+					probabilities: [
+						{ value: 'billing', probability: 0.8 },
+						{ value: 'technical', probability: 0.2 },
+					],
+				},
+			},
+			model: 'gpt-6-luna',
+			usage: undefined,
+		});
+	});
+
+	it.each([
+		[0.9, 0],
+		[0.1, 1],
+	])('routes a predicate probability of %s to output %i', async (probability, index) => {
+		const { functions } = createFunctions(
+			{
+				operation: 'route',
+				routeQuestionType: 'noul',
+				model: 'gpt-6-luna',
+				stateFormat: 'inputItem',
+				routeInstructions: 'Is this ticket urgent?',
+				trueThreshold: 0.5,
+				falseThreshold: 0.5,
+			},
+			items,
+			() => ({
+				statusCode: 200,
+				body: { answers: [{ type: 'predicate', name: 'route', probability }] },
+			}),
+			false,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs[index][0].json.route).toEqual({ probability });
+	});
+
+	it('routes a choice answer to the chosen route', async () => {
+		const { functions } = createFunctions(
+			{
+				operation: 'route',
+				routeQuestionType: 'choice',
+				model: 'gpt-6-luna',
+				stateFormat: 'inputItem',
+				routeInstructions: 'Which department should handle this?',
+				'routes.route': [{ name: 'billing' }, { name: 'technical' }],
+				confidenceHandling: 'bestOption',
+			},
+			items,
+			() => ({
+				statusCode: 200,
+				body: {
+					answers: [{ type: 'choice', name: 'route', choice: 'technical', confidence: 0.9 }],
+				},
+			}),
+			false,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs).toHaveLength(2);
+		expect(outputs[1][0].json.route).toEqual({ choice: 'technical', confidence: 0.9 });
+	});
+
+	it('evaluates with a simplified OpenAI score answer', async () => {
+		const { functions, request } = createFunctions(
+			{
+				operation: 'evaluate',
+				model: 'gpt-6-luna',
+				stateFormat: 'text',
+				stateText: 'I was charged twice for my order.',
+				questionsFormat: 'fields',
+				'questions.question': [
+					{
+						id: 'severity',
+						instructions: 'How severe?',
+						type: 'score',
+						scoreLevels: { level: [{ level: 'Cosmetic' }, { level: 'Blocking' }] },
+					},
+				],
+			},
+			items,
+			() => ({
+				statusCode: 200,
+				body: {
+					model: 'gpt-6-luna-2026',
+					answers: [
+						{
+							type: 'score',
+							name: 'severity',
+							score: 1.3,
+							confidence: 0.9,
+							probabilities: [
+								{ label: 'Cosmetic', probability: 0.2, value: 0 },
+								{ label: 'Blocking', probability: 0.8, value: 1 },
+							],
+						},
+					],
+				},
+			}),
+			false,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		const [, { body }] = request.mock.calls[0] as unknown as [unknown, { body: unknown }];
+		expect(body).toEqual({
+			model: 'gpt-6-luna',
+			input: 'I was charged twice for my order.',
+			questions: [
+				{
+					type: 'score',
+					name: 'severity',
+					instructions: 'How severe?',
+					levels: [{ label: 'Cosmetic' }, { label: 'Blocking' }],
+				},
+			],
+		});
+		expect(outputs[0][0].json).toEqual({
+			ticket: 1,
+			answers: { severity: { score: 1.3, confidence: 0.9 } },
+			model: 'gpt-6-luna-2026',
+		});
+	});
+
+	it('routes an OpenAI score to its nearest level', async () => {
+		const { functions } = createFunctions(
+			{
+				operation: 'route',
+				routeQuestionType: 'score',
+				model: 'gpt-6-luna',
+				stateFormat: 'inputItem',
+				routeInstructions: 'How frustrated is the customer?',
+				'routeLevels.level': [{ level: 'Calm' }, { level: 'Frustrated' }, { level: 'Furious' }],
+			},
+			items,
+			() => ({
+				statusCode: 200,
+				body: {
+					answers: [
+						{
+							type: 'score',
+							name: 'route',
+							score: 1.3,
+							confidence: 0.9,
+							probabilities: [
+								{ label: 'Calm', probability: 0.1, value: 0 },
+								{ label: 'Frustrated', probability: 0.6, value: 1 },
+								{ label: 'Furious', probability: 0.3, value: 2 },
+							],
+						},
+					],
+				},
+			}),
+			false,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs).toHaveLength(3);
+		expect(outputs[0]).toHaveLength(0);
+		expect(outputs[1][0].json.route).toEqual({ score: 1.3, confidence: 0.9 });
+		expect(outputs[2]).toHaveLength(0);
+	});
+
+	it('sends a low-confidence choice with array probabilities to the Fallback output', async () => {
+		const { functions } = createFunctions(
+			{
+				operation: 'route',
+				routeQuestionType: 'choice',
+				model: 'gpt-6-luna',
+				stateFormat: 'inputItem',
+				routeInstructions: 'Which department should handle this?',
+				'routes.route': [{ name: 'billing' }, { name: 'technical' }],
+				confidenceHandling: 'separateOutput',
+				confidenceThreshold: 0.5,
+			},
+			items,
+			() => ({
+				statusCode: 200,
+				body: {
+					answers: [
+						{
+							type: 'choice',
+							name: 'route',
+							choice: 'billing',
+							confidence: 0.4,
+							probabilities: [
+								{ value: 'billing', probability: 0.4 },
+								{ value: 'technical', probability: 0.6 },
+							],
+						},
+					],
+				},
+			}),
+			false,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs).toHaveLength(3);
+		expect(outputs[0]).toHaveLength(0);
+		expect(outputs[1]).toHaveLength(0);
+		expect(outputs[2][0].json.route).toEqual({ choice: 'billing', confidence: 0.4 });
+	});
+
+	it('sends a refused route to the Fallback output when continuing on fail', async () => {
+		const { functions } = createFunctions(
+			{ ...routeParameters, model: 'gpt-6-luna' },
+			items,
+			() => ({
+				statusCode: 200,
+				body: { answers: [{ type: 'refusal', name: 'route' }] },
+			}),
+			true,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs[0]).toHaveLength(0);
+		expect(outputs[1]).toHaveLength(0);
+		expect(outputs[2][0].json).toMatchObject({
+			ticket: 1,
+			error: 'The model refused to answer the route question',
+		});
+	});
+
+	it('stops on a refused route without continue on fail', async () => {
+		const { functions } = createFunctions(
+			{ ...routeParameters, model: 'gpt-6-luna' },
+			items,
+			() => ({
+				statusCode: 200,
+				body: { answers: [{ type: 'refusal', name: 'route' }] },
+			}),
+			false,
+			openAiCredentials,
+		);
+
+		await expect(Decisions.prototype.execute.call(functions)).rejects.toBeInstanceOf(
+			NodeOperationError,
+		);
+	});
+
+	it('stops on an OpenAI score outside the levels instead of clamping it', async () => {
+		const { functions } = createFunctions(
+			{
+				operation: 'route',
+				routeQuestionType: 'score',
+				model: 'gpt-6-luna',
+				stateFormat: 'inputItem',
+				routeInstructions: 'How frustrated is the customer?',
+				'routeLevels.level': [{ level: 'Calm' }, { level: 'Frustrated' }, { level: 'Furious' }],
+			},
+			items,
+			() => ({
+				statusCode: 200,
+				body: { answers: [{ type: 'score', name: 'route', score: 5, confidence: 0.9 }] },
+			}),
+			false,
+			openAiCredentials,
+		);
+
+		await expect(Decisions.prototype.execute.call(functions)).rejects.toThrow(
+			/score 5 for 3 levels/,
+		);
+	});
+
+	it('collects an OpenAI translation error on the item when continuing on fail', async () => {
+		const { functions } = createFunctions(
+			{
+				...openAiEvaluateParameters,
+				'questions.question': [
+					{ id: 'is_urgent', instructions: 'Is it urgent?', type: 'noul' },
+					{ id: 'department', instructions: 'Which department?', type: 'noul' },
+				],
+			},
+			items,
+			() => ({
+				statusCode: 200,
+				body: { answers: [{ type: 'predicate', name: 'is_urgent', probability: 0.9 }] },
+			}),
+			true,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs[0][0].json).toMatchObject({
+			ticket: 1,
+			error: 'OpenAI returned 1 answers for 2 questions',
+		});
+		expect(outputs[0][0].error).toBeInstanceOf(NodeOperationError);
+	});
+
+	it('rejects a nameless raw array before calling the API', async () => {
+		const { functions, request } = createFunctions(
+			{
+				operation: 'evaluate',
+				model: 'gpt-6-luna',
+				stateFormat: 'text',
+				stateText: 'I was charged twice for my order.',
+				questionsFormat: 'json',
+				questionsJson: JSON.stringify([{ type: 'predicate', instructions: 'Is it urgent?' }]),
+			},
+			items,
+			() => ({ statusCode: 200, body: { answers: [] } }),
+			true,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(request).not.toHaveBeenCalled();
+		expect(outputs[0][0].json).toMatchObject({
+			ticket: 1,
+			error: "Every question in a raw array needs a 'name'",
+		});
+		expect(outputs[0][0].error).toBeInstanceOf(NodeOperationError);
+	});
+
+	it('sends a refused Noul route to the Uncertain output when continuing on fail', async () => {
+		const { functions } = createFunctions(
+			{
+				operation: 'route',
+				routeQuestionType: 'noul',
+				model: 'gpt-6-luna',
+				stateFormat: 'inputItem',
+				routeInstructions: 'Is this ticket urgent?',
+				trueThreshold: 0.8,
+				falseThreshold: 0.2,
+			},
+			items,
+			() => ({
+				statusCode: 200,
+				body: { answers: [{ type: 'refusal', name: 'route' }] },
+			}),
+			true,
+			openAiCredentials,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs).toHaveLength(3);
+		expect(outputs[0]).toHaveLength(0);
+		expect(outputs[1]).toHaveLength(0);
+		expect(outputs[2][0].json).toMatchObject({
+			ticket: 1,
+			error: 'The model refused to answer the route question',
+		});
+	});
+
+	it('translates for a custom provider with the OpenAI style', async () => {
+		const { functions, request } = createFunctions(
+			openAiEvaluateParameters,
+			items,
+			openAiEvaluateResponse,
+			false,
+			{ provider: 'custom', apiKey: 'k', baseUrl: 'https://api.custom.com', apiStyle: 'openai' },
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		const [, options] = request.mock.calls[0] as unknown as [
+			unknown,
+			{ url: string; body: unknown },
+		];
+		expect(options.url).toBe('https://api.custom.com/v1/decisions');
+		expect(options.body).toMatchObject({
+			input: 'I was charged twice for my order.',
+			questions: expect.arrayContaining([
+				expect.objectContaining({ type: 'predicate', name: 'is_urgent' }),
+			]),
+		});
+		expect(outputs[0][0].json).toMatchObject({
+			answers: { is_urgent: { probability: 0.9 } },
+		});
+	});
+
+	it('reports an OpenAI error message', async () => {
+		const { functions } = createFunctions(
+			openAiEvaluateParameters,
+			items,
+			() => ({ statusCode: 401, body: { error: { message: 'Invalid API key' } } }),
+			false,
+			openAiCredentials,
+		);
+
+		const error = await Decisions.prototype.execute
+			.call(functions)
+			.catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(NodeApiError);
+		expect((error as Error).message).toContain('Invalid API key');
 	});
 });
