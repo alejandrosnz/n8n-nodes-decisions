@@ -478,13 +478,15 @@ modified.
    a configuration problem per §7.
 3. With **Disabled** (default) the output is exactly §8.1/§8.2. No field is
    added.
-4. With **Best Guess** there is one output. Every answer gains `confidence`
-   (derived for Noul, `0` for a refusal) and `lowConfidence`. A Noul or
+4. With **Best Guess** there is one output. Every answer gains `lowConfidence`,
+   plus `confidence` where the answer has a confidence source (derived for
+   Noul, `0` for a refusal). A Noul or
    predicate always gains `value`, resolved as `p > 0.5`; exactly `0.5`
    resolves to `false`. A refusal never gains `value`. Choice and Score keep
    their value as the best option and never gain `value`.
 5. With **Low Confidence Output** there are two outputs, `Confident` and
-   `Low Confidence`. Every answer gains `confidence` and `lowConfidence`, and
+   `Low Confidence`. Every answer gains `lowConfidence`, plus `confidence`
+   where the answer has a confidence source, and
    the item gains `lowConfidence` and `lowConfidenceQuestions` (the IDs of
    the doubtful questions). When any question is low confidence the whole
    item goes to `Low Confidence`, otherwise to `Confident`. No `value` is
@@ -658,7 +660,7 @@ mistaken for a routing decision, and to the first output otherwise:
 | --- | --- |
 | Evaluate, Low Confidence Output | `Low Confidence` |
 | Evaluate, otherwise | The main output |
-| Route, Choice | `Fallback` if there is one, otherwise the first route |
+| Route, Choice | `Low Confidence` (`Fallback` in version 1) if enabled, otherwise the first route |
 | Route, Noul (Yes/No) v2 | `Low Confidence` if there is one, otherwise False |
 | Route, Noul (Yes/No) v1 | `Uncertain` where one exists, and the no output otherwise |
 | Route, Score v2 | `Low Confidence` if there is one, otherwise the first level |

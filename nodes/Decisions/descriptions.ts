@@ -417,6 +417,7 @@ export const decisionsProperties: INodeProperties[] = [
 		type: 'options',
 		required: true,
 		default: 'bestOption',
+		noDataExpression: true,
 		displayOptions: {
 			show: { operation: ['route'], routeQuestionType: ['choice'], '@version': [1] },
 		},

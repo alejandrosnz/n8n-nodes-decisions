@@ -387,23 +387,29 @@ describe('Editor/runtime output parity', () => {
 	const routes = { route: [{ name: 'billing' }, { name: 'technical' }] };
 	const levels = { level: [{ level: 'Calm' }, { level: 'Frustrated' }, { level: 'Furious' }] };
 
-	const cases: Array<{ name: string; version: number; editor: EditorParameters }> = [
-		{ name: 'evaluate disabled', version: 1, editor: { operation: 'evaluate' } },
-		{ name: 'evaluate disabled v2', version: 2, editor: { operation: 'evaluate' } },
+	// Each case pins the expected count as a literal on both sides: the editor
+	// function and the runtime each answer for themselves, so a divergence in
+	// either one fails loudly instead of agreeing with itself.
+	const cases: Array<{ name: string; version: number; editor: EditorParameters; expected: number }> = [
+		{ name: 'evaluate disabled', version: 1, editor: { operation: 'evaluate' }, expected: 1 },
+		{ name: 'evaluate disabled v2', version: 2, editor: { operation: 'evaluate' }, expected: 1 },
 		{
 			name: 'evaluate bestGuess',
 			version: 2,
 			editor: { operation: 'evaluate', fallbackMode: 'bestGuess' },
+			expected: 1,
 		},
 		{
 			name: 'evaluate lowConfidenceOutput',
 			version: 2,
 			editor: { operation: 'evaluate', fallbackMode: 'lowConfidenceOutput' },
+			expected: 2,
 		},
 		{
 			name: 'choice bestOption v1',
 			version: 1,
 			editor: { operation: 'route', routeQuestionType: 'choice', routes },
+			expected: 2,
 		},
 		{
 			name: 'choice separate v1',
@@ -414,6 +420,7 @@ describe('Editor/runtime output parity', () => {
 				routes,
 				confidenceHandling: 'separateOutput',
 			},
+			expected: 3,
 		},
 		{
 			name: 'choice separate v2',
@@ -424,6 +431,7 @@ describe('Editor/runtime output parity', () => {
 				routes,
 				confidenceHandling: 'separateOutput',
 			},
+			expected: 3,
 		},
 		{
 			name: 'noul v1 with gap',
@@ -434,6 +442,7 @@ describe('Editor/runtime output parity', () => {
 				trueThreshold: 0.8,
 				falseThreshold: 0.2,
 			},
+			expected: 3,
 		},
 		{
 			name: 'noul v1 without gap',
@@ -444,6 +453,7 @@ describe('Editor/runtime output parity', () => {
 				trueThreshold: 0.5,
 				falseThreshold: 0.5,
 			},
+			expected: 2,
 		},
 		{
 			name: 'noul v2 separate',
@@ -453,11 +463,13 @@ describe('Editor/runtime output parity', () => {
 				routeQuestionType: 'noul',
 				confidenceHandling: 'separateOutput',
 			},
+			expected: 3,
 		},
 		{
 			name: 'noul v2 bestOption',
 			version: 2,
 			editor: { operation: 'route', routeQuestionType: 'noul' },
+			expected: 2,
 		},
 		{
 			name: 'noul v2 with stale thresholds and no separate output',
@@ -468,6 +480,7 @@ describe('Editor/runtime output parity', () => {
 				trueThreshold: 0.8,
 				falseThreshold: 0.2,
 			},
+			expected: 2,
 		},
 		{
 			name: 'noul v1 with handling residue and gap',
@@ -479,11 +492,13 @@ describe('Editor/runtime output parity', () => {
 				trueThreshold: 0.8,
 				falseThreshold: 0.2,
 			},
+			expected: 3,
 		},
 		{
 			name: 'score v1',
 			version: 1,
 			editor: { operation: 'route', routeQuestionType: 'score', routeLevels: levels },
+			expected: 3,
 		},
 		{
 			name: 'score v2 separate',
@@ -494,11 +509,13 @@ describe('Editor/runtime output parity', () => {
 				routeLevels: levels,
 				confidenceHandling: 'separateOutput',
 			},
+			expected: 4,
 		},
 		{
 			name: 'score v2 bestOption',
 			version: 2,
 			editor: { operation: 'route', routeQuestionType: 'score', routeLevels: levels },
+			expected: 3,
 		},
 		{
 			name: 'score v1 with handling residue',
@@ -509,13 +526,14 @@ describe('Editor/runtime output parity', () => {
 				routeLevels: levels,
 				confidenceHandling: 'separateOutput',
 			},
+			expected: 3,
 		},
 	];
 
-	it.each(cases)('$name: execute output count matches configuredOutputs', async ({ editor, version }) => {
-		const editorCount = configuredOutputs(editor, version).length;
+	it.each(cases)('$name: editor and runtime agree on $expected outputs', async ({ editor, version, expected }) => {
+		expect(configuredOutputs(editor, version)).toHaveLength(expected);
 		const { functions } = createFunctions(toNodeParameters(editor), answerFor(editor), version);
 		const outputs = await Decisions.prototype.execute.call(functions);
-		expect(outputs).toHaveLength(editorCount);
+		expect(outputs).toHaveLength(expected);
 	});
 });

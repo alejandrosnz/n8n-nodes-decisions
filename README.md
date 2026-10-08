@@ -94,10 +94,10 @@ Confidence is normalized to 0–1. Choice and Score use the `confidence` the API
 | Fallback Mode | Behaviour |
 | --- | --- |
 | Disabled (default) | Today's output, unchanged. No fields are added. |
-| Best Guess | One output. Every answer gains `confidence` (derived for Yes/No, `0` for a refusal) and `lowConfidence`. Yes/No answers also gain `value`, resolved as `p > 0.5`. Exactly `0.5` resolves to `false`: with no evidence for yes, the node does not assert it. Choice and Score never gain `value`. |
-| Low Confidence Output | Two outputs: `Confident` and `Low Confidence`. Every answer gains `confidence` and `lowConfidence`, and the item gains `lowConfidence` plus `lowConfidenceQuestions` (the IDs of the doubtful questions). If any question is low confidence, the whole item goes to `Low Confidence`. No `value` is resolved. A refusal always goes to `Low Confidence`. |
+| Best Guess | One output. Every answer gains `lowConfidence`, plus `confidence` where the answer has a confidence source (derived for Yes/No, `0` for a refusal). Yes/No answers also gain `value`, resolved as `p > 0.5`. Exactly `0.5` resolves to `false`: with no evidence for yes, the node does not assert it. Choice and Score never gain `value`. |
+| Low Confidence Output | Two outputs: `Confident` and `Low Confidence`. Every answer gains `lowConfidence`, plus `confidence` where the answer has a confidence source, and the item gains `lowConfidence` plus `lowConfidenceQuestions` (the IDs of the doubtful questions). If any question is low confidence, the whole item goes to `Low Confidence`. No `value` is resolved. A refusal always goes to `Low Confidence`. |
 
-**Fallback Mode** must resolve to the same value for every item in a run. Chaining two Decisions nodes recomputes these fields, overwriting the previous node's `confidence`, `lowConfidence`, `lowConfidenceQuestions` and `value`. When an AI Agent uses the node as a tool, prefer **Disabled** or **Best Guess** so the agent receives a single result.
+**Fallback Mode** is not settable by expression. Chaining two Decisions nodes recomputes these fields, overwriting the previous node's `confidence`, `lowConfidence`, `lowConfidenceQuestions` and `value`. When an AI Agent uses the node as a tool, prefer **Disabled** or **Best Guess** so the agent receives a single result. Answers without a confidence source (for example a Score without `confidence`) are treated as reliable and gain no `confidence` field.
 
 Best Guess output:
 

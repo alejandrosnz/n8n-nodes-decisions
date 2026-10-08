@@ -123,6 +123,28 @@ describe('Evaluate fallbackMode outputs', () => {
 			expect(property.default).toBe(0.7);
 		}
 	});
+
+	it('blocks expressions on every parameter that decides the outputs', () => {
+		// These parameters change the output count or labels, which n8n resolves
+		// in the editor before the run. The runtime agreement check is only a
+		// defense; the editor must refuse expressions up front.
+		for (const name of [
+			'operation',
+			'fallbackMode',
+			'confidenceHandling',
+			'routeQuestionType',
+			'routeTrueMeans',
+			'routeFalseMeans',
+			'trueThreshold',
+			'falseThreshold',
+		]) {
+			const matches = decisionsProperties.filter((property) => property.name === name);
+			expect(matches.length).toBeGreaterThan(0);
+			for (const property of matches) {
+				expect(property.noDataExpression).toBe(true);
+			}
+		}
+	});
 });
 
 describe('Evaluate fallback execution', () => {

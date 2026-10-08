@@ -460,17 +460,9 @@ export class Decisions implements INodeType {
 			if (!isRoute) {
 				const answers: Record<string, Answer> = response.answers ?? {};
 				const simplify = this.getNodeParameter('options.simplify', itemIndex, true) as boolean;
-				const fallbackMode = this.getNodeParameter(
-					'fallbackMode',
-					itemIndex,
-					'disabled',
-				) as EvaluateFallbackMode;
-				if (fallbackMode !== evaluateMode) {
-					fail(
-						context,
-						`'Fallback Mode' must be the same for every item, but item 0 uses '${evaluateMode}' and item ${itemIndex} uses '${fallbackMode}'`,
-					);
-				}
+				// The pre-scan guarantees every item shares this mode, so it is
+				// read once up front instead of per item.
+				const fallbackMode = evaluateMode;
 				if (fallbackMode !== 'bestGuess' && fallbackMode !== 'lowConfidenceOutput') {
 					const fields: IDataObject = simplify
 						? { answers: simplifyAnswers(answers), model: response.model }
