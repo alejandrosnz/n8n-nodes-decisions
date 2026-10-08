@@ -212,7 +212,15 @@ export function simplifyAnswers(answers: Record<string, Answer>): IDataObject {
 	);
 }
 
-/** Serialized method used in expression, must not use any externally defined variables */
+/** Serialized method used in expression, must not use any externally defined variables.
+ * The editor evaluates it as `configuredOutputs($parameter, $nodeVersion)`.
+ * Noul has two generations: v1 uses the true/false probability thresholds (an
+ * `Uncertain` output when they leave a gap); v2 reuses `confidenceHandling`
+ * like Choice/Score (a `Low Confidence` output when set to `separateOutput`).
+ * Branching on the node version keeps editor and runtime in agreement even
+ * with stale parameters (a v2 node copied from v1 still carries thresholds;
+ * a v1 node may carry a `confidenceHandling` residue). Without a version it
+ * falls back to v1 behaviour. */
 export const configuredOutputs = (
 	parameters: {
 		operation?: string;
@@ -224,9 +232,18 @@ export const configuredOutputs = (
 		routeFalseMeans?: string;
 		trueThreshold?: number;
 		falseThreshold?: number;
+		fallbackMode?: string;
 	} = {},
+	nodeVersion?: number,
 ) => {
+	const isV2 = (nodeVersion ?? 1) >= 2;
 	if (parameters.operation !== 'route') {
+		if (parameters.fallbackMode === 'lowConfidenceOutput') {
+			return [
+				{ type: 'main', displayName: 'Confident' },
+				{ type: 'main', displayName: 'Low Confidence' },
+			];
+		}
 		return [{ type: 'main' }];
 	}
 	if (parameters.routeQuestionType === 'noul') {
@@ -234,6 +251,12 @@ export const configuredOutputs = (
 			{ type: 'main', displayName: (parameters.routeTrueMeans ?? '').trim() || 'True' },
 			{ type: 'main', displayName: (parameters.routeFalseMeans ?? '').trim() || 'False' },
 		];
+		if (isV2) {
+			if (parameters.confidenceHandling === 'separateOutput') {
+				outputs.push({ type: 'main', displayName: 'Low Confidence' });
+			}
+			return outputs;
+		}
 		const trueThreshold = parameters.trueThreshold ?? 0.5;
 		const falseThreshold = parameters.falseThreshold ?? 0.5;
 		if (trueThreshold > falseThreshold) {
@@ -247,10 +270,14 @@ export const configuredOutputs = (
 		if (levels.length === 0) {
 			return [{ type: 'main' }];
 		}
-		return levels.map(({ level }, index) => ({
+		const outputs = levels.map(({ level }, index) => ({
 			type: 'main',
 			displayName: (level ?? '').trim() || `Level ${index}`,
 		}));
+		if (isV2 && parameters.confidenceHandling === 'separateOutput') {
+			outputs.push({ type: 'main', displayName: 'Low Confidence' });
+		}
+		return outputs;
 	}
 	const routes = parameters.routes?.route ?? [];
 	const outputs = routes
@@ -261,7 +288,7 @@ export const configuredOutputs = (
 		return [{ type: 'main' }];
 	}
 	if (parameters.confidenceHandling === 'separateOutput') {
-		outputs.push({ type: 'main', displayName: 'Fallback' });
+		outputs.push({ type: 'main', displayName: isV2 ? 'Low Confidence' : 'Fallback' });
 	}
 	return outputs;
 };
