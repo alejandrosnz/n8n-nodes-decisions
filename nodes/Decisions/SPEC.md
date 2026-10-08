@@ -305,11 +305,11 @@ A route is decided by one question, of any of the three types.
 | Question Type | yes | Choice | always | Choice, Noul (Yes/No) or Score. |
 | Instructions | yes | — | always | What the model should decide. |
 | Routes | yes | — | Choice | A reorderable list of two to 255 routes; each entry becomes an output. |
-| Confidence Handling | yes | Always Route | always | See §8.3. |
-| Confidence Threshold | no | `0.7` | A Low Confidence output enabled | Range 0–1. |
 | True Means | no | — | Noul | What a yes (value near 1) means. Also labels the output. |
 | False Means | no | — | Noul | What a no (value near 0) means. Also labels the output. |
 | Levels | yes | two empty entries | Score | A reorderable list of two to ten levels, lowest first; each entry becomes an output. |
+| Confidence Handling | yes | Always Route | always | See §8.3. |
+| Confidence Threshold | no | `0.7` | A Low Confidence output enabled | Range 0–1. |
 
 In node version 1, **Confidence Handling** and **Confidence Threshold** were offered only for a Choice, and Noul used **True Probability Threshold** / **False Probability Threshold** (both default `0.5`) with an `Uncertain` output for the gap between them. Those two thresholds exist only in version 1. Workflows saved with version 1 keep running with the old thresholds; new workflows use one confidence threshold for all three question types, per §8.3. An asymmetric v1 gap cannot be expressed as a single confidence threshold: `confidence ≥ c` is exactly `p ≥ 0.5 + c/2` (true) or `p ≤ 0.5 − c/2` (false).
 
