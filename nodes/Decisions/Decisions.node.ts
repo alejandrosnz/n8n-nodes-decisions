@@ -17,6 +17,8 @@ import type {
 	ScoreAnswer,
 } from './api';
 import { CREDENTIAL_NAME, evaluateState, usesOpenAiFormat } from './api';
+import type { EvaluateFallbackMode } from './confidence';
+import { enrichAnswers } from './confidence';
 import { decisionsProperties } from './descriptions';
 import type { CriteriaEntry, ItemContext, LevelEntry, QuestionEntry } from './helpers';
 import {
@@ -286,13 +288,25 @@ export class Decisions implements INodeType {
 			isNoul &&
 			(this.getNodeParameter('trueThreshold', 0, 0.5) as number) >
 				(this.getNodeParameter('falseThreshold', 0, 0.5) as number);
+		let evaluateTwoOutputs = false;
+		if (!isRoute) {
+			for (let scanIndex = 0; scanIndex < items.length; scanIndex++) {
+				const mode = this.getNodeParameter('fallbackMode', scanIndex, 'disabled') as string;
+				if (mode === 'lowConfidenceOutput') {
+					evaluateTwoOutputs = true;
+					break;
+				}
+			}
+		}
 		const outputCount = isNoul
 			? 2 + (hasUncertain ? 1 : 0)
 			: isScore
 				? levelCount
 				: isRoute
 					? routeNames.length + (separateLowConfidence ? 1 : 0)
-					: 1;
+					: evaluateTwoOutputs
+						? 2
+						: 1;
 		const outputs: INodeExecutionData[][] = Array.from(
 			{ length: Math.max(outputCount, 1) },
 			() => [],
@@ -319,10 +333,62 @@ export class Decisions implements INodeType {
 			if (!isRoute) {
 				const answers: Record<string, Answer> = response.answers ?? {};
 				const simplify = this.getNodeParameter('options.simplify', itemIndex, true) as boolean;
+				const fallbackMode = this.getNodeParameter(
+					'fallbackMode',
+					itemIndex,
+					'disabled',
+				) as EvaluateFallbackMode;
+				if (fallbackMode !== 'bestGuess' && fallbackMode !== 'lowConfidenceOutput') {
+					const fields: IDataObject = simplify
+						? { answers: simplifyAnswers(answers), model: response.model }
+						: { answers, model: response.model, usage: response.usage };
+					outputs[0].push(buildOutputItem(item, fields, includeOtherFields, itemIndex));
+					return;
+				}
+				const threshold = this.getNodeParameter(
+					'confidenceThreshold',
+					itemIndex,
+					0.7,
+				) as number;
+				const base: Record<string, IDataObject> = simplify
+					? (simplifyAnswers(answers) as Record<string, IDataObject>)
+					: Object.fromEntries(
+							Object.entries(answers).map(([id, answer]) => [
+								id,
+								{ ...(answer as unknown as IDataObject) },
+							]),
+						);
+				const { answers: enriched, lowConfidenceQuestions } = enrichAnswers(
+					base,
+					fallbackMode,
+					threshold,
+				);
+				if (fallbackMode === 'bestGuess') {
+					const fields: IDataObject = simplify
+						? { answers: enriched, model: response.model }
+						: { answers: enriched, model: response.model, usage: response.usage };
+					outputs[0].push(buildOutputItem(item, fields, includeOtherFields, itemIndex));
+					return;
+				}
+				const isLow = lowConfidenceQuestions.length > 0;
 				const fields: IDataObject = simplify
-					? { answers: simplifyAnswers(answers), model: response.model }
-					: { answers, model: response.model, usage: response.usage };
-				outputs[0].push(buildOutputItem(item, fields, includeOtherFields, itemIndex));
+					? {
+							answers: enriched,
+							model: response.model,
+							lowConfidence: isLow,
+							lowConfidenceQuestions,
+						}
+					: {
+							answers: enriched,
+							model: response.model,
+							usage: response.usage,
+							lowConfidence: isLow,
+							lowConfidenceQuestions,
+						};
+				const target = isLow ? 1 : 0;
+				outputs[target < outputs.length ? target : 0].push(
+					buildOutputItem(item, fields, includeOtherFields, itemIndex),
+				);
 				return;
 			}
 

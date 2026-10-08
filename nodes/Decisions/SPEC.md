@@ -125,7 +125,7 @@ carry the node's light and dark icons.
 | Default instance name | `Decisions` |
 | Subtitle | The selected operation |
 | Inputs | One main input |
-| Outputs | Per §8.3 |
+| Outputs | Per §8.1b and §8.3 |
 | Credential | The credential in §3, required |
 
 1. The node MUST ship separate light and dark SVG icons.
@@ -277,12 +277,22 @@ case the only check that applies to **Using Raw JSON**.
 Hand-authoring does not scale to large option sets. **Using Raw JSON** remains the
 way to supply options generated from data.
 
-No confidence control may be offered for a Noul question; the API returns no
-confidence for one.
+No per-question confidence control may be offered for a Noul question; the API
+returns no confidence for one. Low-confidence handling below is global and
+applies to all questions, deriving Noul confidence as in §8.1b.
 
 **Questions** — shown for Using Raw JSON. Required, JSON editor, defaulting to
 a single worked example. It carries the same label as the list above; only one
 is ever visible.
+
+Evaluate also offers global low-confidence handling (see §8.1b):
+
+| Label | Required | Default | Shown when | Meaning |
+| --- | --- | --- | --- | --- |
+| Fallback Mode | no | Disabled | Evaluate | Disabled, Best Guess or Low Confidence Output. |
+| Confidence Threshold | no | `0.7` | Evaluate, and Fallback Mode is not Disabled | Range 0–1. Answers with confidence below this are low confidence. |
+
+The threshold is global; there is no per-question override.
 
 ### 5.5 Routes — Route only
 
@@ -447,7 +457,37 @@ One output item per input item:
 3. `model` MUST be the versioned ID the API reports, not the requested alias.
 4. Each key MUST carry the API's own name and value. Simplifying keeps the
    answer's value and `confidence` and leaves out `type`, `probabilities` and
-   `legend`; it MUST NOT rename, derive or add a key.
+   `legend`; it MUST NOT rename, derive or add a key. §8.1b is an explicit
+   exception: it adds `confidence`, `lowConfidence` and `value` where stated.
+
+### 8.1b Evaluate low-confidence handling
+
+Fallback Mode selects how Evaluate handles low-confidence answers. It operates
+on the API response, so questions built in the UI and Raw JSON behave alike.
+The raw `noul`, `choice`, `score` and `probability` values MUST never be
+modified.
+
+1. Confidence is normalized to 0–1. Choice and Score use their own
+   `confidence`. A Noul (and, with OpenAI, a predicate) derives it as
+   `|p − 0.5| × 2`, so `0.85 → 0.70`. An answer with no confidence source is
+   treated as reliable and MUST NOT be marked low confidence.
+2. An answer is low confidence when its confidence is strictly below
+   **Confidence Threshold**. A confidence exactly on the threshold is not low
+   confidence.
+3. With **Disabled** (default) the output is exactly §8.1/§8.2. No field is
+   added.
+4. With **Best Guess** there is one output. Every answer gains `confidence`
+   (derived for Noul) and `lowConfidence`. A Noul always gains `value`,
+   resolved as `noul > 0.5`; exactly `0.5` resolves to `false`. Choice and
+   Score keep their value as the best option.
+5. With **Low Confidence Output** there are two outputs, `Confident` and
+   `Low Confidence`. Every answer gains `confidence` and `lowConfidence`, and
+   the item gains `lowConfidence` and `lowConfidenceQuestions` (the IDs of
+   the doubtful questions). When any question is low confidence the whole
+   item goes to `Low Confidence`, otherwise to `Confident`. No `value` is
+   resolved.
+6. A failing item goes to the main (`Confident`) output as in §9.3, without
+   passing through the confidence logic.
 
 ### 8.1a OpenAI answers
 

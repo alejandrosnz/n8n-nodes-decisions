@@ -8,6 +8,7 @@ package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Low confidence handling in Evaluate, via **Fallback Mode** (`Disabled`, `Best Guess`, `Low Confidence Output`) and **Confidence Threshold** (default `0.7`). Best Guess adds `confidence`, `lowConfidence` and, for Yes/No questions, `value` (`noul > 0.5`, so exactly `0.5` resolves to `false`). Low Confidence Output adds a second output and routes items with any low-confidence answer there, adding item-level `lowConfidence` and `lowConfidenceQuestions`. Yes/No confidence is derived as `|p − 0.5| × 2`.
 - OpenAI provider in the Decisions API credential.
 - Translation of requests and responses to OpenAI's Decisions API beta.
 - Support for `predicate` and `refusal` answers.

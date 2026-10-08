@@ -224,9 +224,16 @@ export const configuredOutputs = (
 		routeFalseMeans?: string;
 		trueThreshold?: number;
 		falseThreshold?: number;
+		fallbackMode?: string;
 	} = {},
 ) => {
 	if (parameters.operation !== 'route') {
+		if (parameters.fallbackMode === 'lowConfidenceOutput') {
+			return [
+				{ type: 'main', displayName: 'Confident' },
+				{ type: 'main', displayName: 'Low Confidence' },
+			];
+		}
 		return [{ type: 'main' }];
 	}
 	if (parameters.routeQuestionType === 'noul') {

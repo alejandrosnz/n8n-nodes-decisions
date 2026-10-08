@@ -85,6 +85,44 @@ When an AI Agent uses the node as a tool, the node runs Evaluate.
 
 With OpenAI, Noul questions are sent as predicate questions and their answer is `probability` instead of `noul`. A question the model declines comes back as `{ "type": "refusal" }`. Raw JSON can also be an array of questions in OpenAI's format.
 
+#### Low confidence handling
+
+Evaluate can flag answers the model is unsure about. Set **Fallback Mode** to choose how, and **Confidence Threshold** (0–1, default `0.7`) to set when an answer counts as low confidence: an answer with confidence strictly below the threshold is low confidence. It works the same for questions built in the UI and for Raw JSON, because it runs on the API response. The raw `noul`, `choice`, `score` and `probability` values are never modified.
+
+Confidence is normalized to 0–1. Choice and Score use the `confidence` the API returns. Yes/No questions have no confidence field, so it is derived as `|p − 0.5| × 2`, so `0.85 → 0.70`. An answer with no confidence source is treated as reliable.
+
+| Fallback Mode | Behaviour |
+| --- | --- |
+| Disabled (default) | Today's output, unchanged. No fields are added. |
+| Best Guess | One output. Every answer gains `confidence` (derived for Yes/No) and `lowConfidence`. Yes/No answers also gain `value`, resolved as `noul > 0.5`. Exactly `0.5` resolves to `false`: with no evidence for yes, the node does not assert it. |
+| Low Confidence Output | Two outputs: `Confident` and `Low Confidence`. Every answer gains `confidence` and `lowConfidence`, and the item gains `lowConfidence` plus `lowConfidenceQuestions` (the IDs of the doubtful questions). If any question is low confidence, the whole item goes to `Low Confidence`. No `value` is resolved. |
+
+Best Guess output:
+
+```json
+{
+  "answers": {
+    "is_urgent": { "noul": 0.55, "confidence": 0.1, "lowConfidence": true, "value": true },
+    "department": { "choice": "billing", "confidence": 0.81, "lowConfidence": false }
+  },
+  "model": "jev-1.13.0"
+}
+```
+
+Low Confidence Output, on the `Low Confidence` output:
+
+```json
+{
+  "answers": {
+    "is_urgent": { "noul": 0.55, "confidence": 0.1, "lowConfidence": true },
+    "department": { "choice": "billing", "confidence": 0.81, "lowConfidence": false }
+  },
+  "model": "jev-1.13.0",
+  "lowConfidence": true,
+  "lowConfidenceQuestions": ["is_urgent"]
+}
+```
+
 ### Route
 
 Route asks one question and sends the item to the output that matches the answer. **Question Type** sets the kind of question and the outputs you get:

@@ -298,6 +298,45 @@ export const decisionsProperties: INodeProperties[] = [
 		description: 'A map of question ID to question, sent to the API as written',
 	},
 	{
+		displayName: 'Fallback Mode',
+		name: 'fallbackMode',
+		type: 'options',
+		default: 'disabled',
+		displayOptions: { show: { operation: ['evaluate'] } },
+		description: 'How to handle answers with low confidence',
+		options: [
+			{
+				name: 'Disabled',
+				value: 'disabled',
+				description: 'Return answers as the model decides',
+			},
+			{
+				name: 'Best Guess',
+				value: 'bestGuess',
+				description:
+					'Always returns a definitive value. For Yes/No questions, exactly 0.5 resolves to false.',
+			},
+			{
+				name: 'Low Confidence Output',
+				value: 'lowConfidenceOutput',
+				description: 'Send items with any low-confidence answer to a second output',
+			},
+		],
+	},
+	{
+		displayName: 'Confidence Threshold',
+		name: 'confidenceThreshold',
+		type: 'number',
+		default: 0.7,
+		typeOptions: { minValue: 0, maxValue: 1, numberPrecision: 2 },
+		displayOptions: {
+			show: { operation: ['evaluate'] },
+			hide: { fallbackMode: ['disabled'] },
+		},
+		description:
+			'Answers with confidence below this are considered low confidence. For Yes/No questions, confidence is computed as |p − 0.5| × 2, so 0.85 → 0.70.',
+	},
+	{
 		displayName: 'Question Type',
 		name: 'routeQuestionType',
 		type: 'options',
