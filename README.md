@@ -89,13 +89,15 @@ With OpenAI, Noul questions are sent as predicate questions and their answer is 
 
 Evaluate can flag answers the model is unsure about. Set **Fallback Mode** to choose how, and **Confidence Threshold** (0–1, default `0.7`) to set when an answer counts as low confidence: an answer with confidence strictly below the threshold is low confidence. It works the same for questions built in the UI and for Raw JSON, because it runs on the API response. The raw `noul`, `choice`, `score` and `probability` values are never modified.
 
-Confidence is normalized to 0–1. Choice and Score use the `confidence` the API returns. Yes/No questions have no confidence field, so it is derived as `|p − 0.5| × 2`, so `0.85 → 0.70`. An answer with no confidence source is treated as reliable.
+Confidence is normalized to 0–1. Choice and Score use the `confidence` the API returns. Yes/No questions have no confidence field, so it is derived as `|p − 0.5| × 2`, so `0.85 → 0.70`. A refusal always counts as low confidence. A Choice or Score answer without a confidence value is treated as reliable. The threshold must be a finite number in 0–1; anything else is an error.
 
 | Fallback Mode | Behaviour |
 | --- | --- |
 | Disabled (default) | Today's output, unchanged. No fields are added. |
-| Best Guess | One output. Every answer gains `confidence` (derived for Yes/No) and `lowConfidence`. Yes/No answers also gain `value`, resolved as `noul > 0.5`. Exactly `0.5` resolves to `false`: with no evidence for yes, the node does not assert it. |
-| Low Confidence Output | Two outputs: `Confident` and `Low Confidence`. Every answer gains `confidence` and `lowConfidence`, and the item gains `lowConfidence` plus `lowConfidenceQuestions` (the IDs of the doubtful questions). If any question is low confidence, the whole item goes to `Low Confidence`. No `value` is resolved. |
+| Best Guess | One output. Every answer gains `confidence` (derived for Yes/No, `0` for a refusal) and `lowConfidence`. Yes/No answers also gain `value`, resolved as `p > 0.5`. Exactly `0.5` resolves to `false`: with no evidence for yes, the node does not assert it. Choice and Score never gain `value`. |
+| Low Confidence Output | Two outputs: `Confident` and `Low Confidence`. Every answer gains `confidence` and `lowConfidence`, and the item gains `lowConfidence` plus `lowConfidenceQuestions` (the IDs of the doubtful questions). If any question is low confidence, the whole item goes to `Low Confidence`. No `value` is resolved. A refusal always goes to `Low Confidence`. |
+
+**Fallback Mode** must resolve to the same value for every item in a run. Chaining two Decisions nodes recomputes these fields, overwriting the previous node's `confidence`, `lowConfidence`, `lowConfidenceQuestions` and `value`. When an AI Agent uses the node as a tool, prefer **Disabled** or **Best Guess** so the agent receives a single result.
 
 Best Guess output:
 
@@ -130,14 +132,16 @@ Route asks one question and sends the item to the output that matches the answer
 | Question Type | Outputs | An item goes to |
 | --- | --- | --- |
 | Choice | One per route, labelled with its **Name** | The route the model picked |
-| Noul (Yes/No) | True and False, labelled with **True Means** and **False Means** if you fill them in | True if at or above **True Probability Threshold**, False if at or below **False Probability Threshold** |
+| Noul (Yes/No) | True and False, labelled with **True Means** and **False Means** if you fill them in | True if `p > 0.5`, False otherwise — or to `Low Confidence` when unsure, see below |
 | Score | One per level, labelled with the level's text | The level nearest the score |
 
-Each question type has its own way to add or change outputs:
+All three question types share one confidence model. Yes/No confidence is `|p − 0.5| × 2`, so a threshold `c` means `p ≥ 0.5 + c/2` (true) or `p ≤ 0.5 − c/2` (false). Set **Confidence Handling** to **Route to Separate Low Confidence Output** to add an extra output for unsure items (`Fallback` for Choice, `Low Confidence` for Noul and Score). An item goes there when its answer's confidence is below **Confidence Threshold** (default `0.7`).
 
 - **Choice: Fallback output.** Set **Confidence Handling** to **Route to Separate Fallback Output** to add a `Fallback` output. An item goes there when its answer's confidence is below **Confidence Threshold**.
-- **Noul: Uncertain output.** Both thresholds start at `0.5`, so every item goes to True or False. Set them apart, for example `0.8` and `0.2`, to add an `Uncertain` output for answers that fall between the two.
-- **Score: level boundaries.** Levels are numbered from 0, lowest first. The boundary between two levels is halfway between their numbers. A score from `0.5` to just under `1.5` goes to level 1, and a score exactly on a boundary goes to the higher level.
+- **Noul: Low Confidence output.** With a separate output enabled, an unsure item goes to `Low Confidence`. Without it, the item follows `p > 0.5`.
+- **Score: level boundaries.** Levels are numbered from 0, lowest first. The boundary between two levels is halfway between their numbers. A score from `0.5` to just under `1.5` goes to level 1, and a score exactly on a boundary goes to the higher level. With a separate output enabled, a low-confidence item goes to `Low Confidence` instead of its level.
+
+Workflows saved with node version 1 keep the old Noul behaviour: **True/False Probability Thresholds** with an `Uncertain` output for the gap between them. Those thresholds are not offered in version 2, and an asymmetric v1 gap cannot be expressed as a single confidence threshold.
 
 The `route` field holds the answer in the same form Evaluate uses, and the output the item leaves from shows the decision. If the model refuses the route question, that is a failure, handled as in Errors below — it never routes to a decision output.
 
@@ -181,10 +185,10 @@ To keep the workflow running when an item fails, set **On Error**:
 
 | Operation | Output the failed item goes to |
 | --- | --- |
-| Evaluate | The main output |
+| Evaluate | The main output, or `Low Confidence` when **Low Confidence Output** is on |
 | Route, Choice | `Fallback` if there is one, otherwise the first route |
-| Route, Noul (Yes/No) | `Uncertain` if there is one, otherwise False |
-| Route, Score | The first level |
+| Route, Noul (Yes/No) | `Low Confidence` if there is one, otherwise False (`Uncertain` if there is one, otherwise False, in version 1) |
+| Route, Score | `Low Confidence` if there is one, otherwise the first level |
 
 ## Compatibility
 

@@ -120,7 +120,7 @@ carry the node's light and dark icons.
 | Display name | `Decisions` |
 | Identifier | `decisions` |
 | Group | `transform` |
-| Version | `1` |
+| Version | `2` (`1` still runs for existing workflows, see §5.5 and §8.3) |
 | Description | `Ask Decisions API typed questions and get calibrated probabilities` |
 | Default instance name | `Decisions` |
 | Subtitle | The selected operation |
@@ -289,10 +289,12 @@ Evaluate also offers global low-confidence handling (see §8.1b):
 
 | Label | Required | Default | Shown when | Meaning |
 | --- | --- | --- | --- | --- |
-| Fallback Mode | no | Disabled | Evaluate | Disabled, Best Guess or Low Confidence Output. |
-| Confidence Threshold | no | `0.7` | Evaluate, and Fallback Mode is not Disabled | Range 0–1. Answers with confidence below this are low confidence. |
+| Fallback Mode | no | Disabled | Evaluate | Disabled, Best Guess or Low Confidence Output. Must be the same for every item in a run. |
+| Confidence Threshold | no | `0.7` | Evaluate, and Fallback Mode is not Disabled | Range 0–1. Answers with confidence below this are low confidence. Must be a finite number in range; anything else is an error. |
 
-The threshold is global; there is no per-question override.
+The threshold is global; there is no per-question override. A non-finite threshold, or one outside 0–1 (for example from an expression resolving to `NaN`), MUST be reported as a configuration problem per §7 rather than silently disabling the filter.
+
+When the node is used as an AI Agent tool only Evaluate is offered, and **Low Confidence Output** still produces two outputs. Prefer **Disabled** or **Best Guess** there, so the agent receives a single result.
 
 ### 5.5 Routes — Route only
 
@@ -303,23 +305,15 @@ A route is decided by one question, of any of the three types.
 | Question Type | yes | Choice | always | Choice, Noul (Yes/No) or Score. |
 | Instructions | yes | — | always | What the model should decide. |
 | Routes | yes | — | Choice | A reorderable list of two to 255 routes; each entry becomes an output. |
-| Confidence Handling | yes | Always Route | Choice | See §8.3. |
-| Confidence Threshold | no | `0.5` | Choice, and a Fallback output enabled | Range 0–1. |
+| Confidence Handling | yes | Always Route | always | See §8.3. |
+| Confidence Threshold | no | `0.7` | A Low Confidence output enabled | Range 0–1. |
 | True Means | no | — | Noul | What a yes (value near 1) means. Also labels the output. |
 | False Means | no | — | Noul | What a no (value near 0) means. Also labels the output. |
-| True Probability Threshold | no | `0.5` | Noul | At or above this, the item is a yes. Range 0–1. |
-| False Probability Threshold | no | `0.5` | Noul | At or below this, the item is a no. Range 0–1. |
 | Levels | yes | two empty entries | Score | A reorderable list of two to ten levels, lowest first; each entry becomes an output. |
 
-Confidence Handling and Confidence Threshold are offered only for a Choice,
-because the API returns no confidence for a Noul. The Noul equivalent is the
-gap between the two thresholds, per §8.3. A Score sends every item to the level
-nearest its score, per §8.3.
+In node version 1, **Confidence Handling** and **Confidence Threshold** were offered only for a Choice, and Noul used **True Probability Threshold** / **False Probability Threshold** (both default `0.5`) with an `Uncertain` output for the gap between them. Those two thresholds exist only in version 1. Workflows saved with version 1 keep running with the old thresholds; new workflows use one confidence threshold for all three question types, per §8.3. An asymmetric v1 gap cannot be expressed as a single confidence threshold: `confidence ≥ c` is exactly `p ≥ 0.5 + c/2` (true) or `p ≤ 0.5 − c/2` (false).
 
-The **True Probability Threshold** MUST NOT be below the **False Probability
-Threshold**. The two would then overlap, leaving an answer between them
-belonging to both outcomes; that MUST be reported as a configuration problem
-per §7.
+In version 1 the **True Probability Threshold** MUST NOT be below the **False Probability Threshold**. The two would then overlap, leaving an answer between them belonging to both outcomes; that MUST be reported as a configuration problem per §7.
 
 Each **Routes** entry is titled by its **Name**:
 
@@ -331,10 +325,14 @@ Each **Routes** entry is titled by its **Name**:
 Each **Levels** entry is titled and filled in exactly as a Score question's
 levels in §5.3.
 
-A route's **Name**, a level's **Level**, the **Question Type**, both meanings
-and both thresholds MUST NOT be settable by expression. Between them they decide how many outputs
+A route's **Name**, a level's **Level**, the **Question Type**, both meanings,
+**Confidence Handling** and, in version 1, both probability thresholds MUST NOT
+be settable by expression. Between them they decide how many outputs
 the node has and what each is called, and that is resolved in the editor before
-the workflow runs.
+the workflow runs. **Confidence Threshold** values do not
+change the output count, so they MAY be set by expression. **Fallback Mode** MAY
+be set by expression but MUST resolve to the same value for every item in a run;
+a value that differs between items is an error.
 
 A route is a Choice option, so by §5 rule 3 its fields carry the same labels as
 an option's.
@@ -469,25 +467,35 @@ modified.
 
 1. Confidence is normalized to 0–1. Choice and Score use their own
    `confidence`. A Noul (and, with OpenAI, a predicate) derives it as
-   `|p − 0.5| × 2`, so `0.85 → 0.70`. An answer with no confidence source is
-   treated as reliable and MUST NOT be marked low confidence.
+   `|p − 0.5| × 2`, so `0.85 → 0.70`, rounded to 1e-9 so float noise never
+   flips a comparison (`0.55 → 0.1` exactly). A refusal has confidence `0`.
+   An answer with no confidence source (for example a Score without
+   `confidence`) is treated as reliable and MUST NOT be marked low confidence.
 2. An answer is low confidence when its confidence is strictly below
    **Confidence Threshold**. A confidence exactly on the threshold is not low
-   confidence.
+   confidence. The threshold MUST be a finite number in 0–1; anything else is
+   a configuration problem per §7.
 3. With **Disabled** (default) the output is exactly §8.1/§8.2. No field is
    added.
 4. With **Best Guess** there is one output. Every answer gains `confidence`
-   (derived for Noul) and `lowConfidence`. A Noul always gains `value`,
-   resolved as `noul > 0.5`; exactly `0.5` resolves to `false`. Choice and
-   Score keep their value as the best option.
+   (derived for Noul, `0` for a refusal) and `lowConfidence`. A Noul or
+   predicate always gains `value`, resolved as `p > 0.5`; exactly `0.5`
+   resolves to `false`. A refusal never gains `value`. Choice and Score keep
+   their value as the best option and never gain `value`.
 5. With **Low Confidence Output** there are two outputs, `Confident` and
    `Low Confidence`. Every answer gains `confidence` and `lowConfidence`, and
    the item gains `lowConfidence` and `lowConfidenceQuestions` (the IDs of
    the doubtful questions). When any question is low confidence the whole
    item goes to `Low Confidence`, otherwise to `Confident`. No `value` is
-   resolved.
-6. A failing item goes to the main (`Confident`) output as in §9.3, without
-   passing through the confidence logic.
+   resolved. A refusal always sends its item to `Low Confidence`.
+6. A failing item goes to the `Low Confidence` output as in §9.3, without
+   passing through the confidence logic. With **Disabled** or **Best Guess**
+   it goes to the single main output.
+
+Chaining two Decisions nodes recomputes these fields: a second node
+overwrites `confidence`, `lowConfidence`, `lowConfidenceQuestions` and
+`value` from the previous one. An incoming field named `value` on an answer
+is therefore not preserved.
 
 ### 8.1a OpenAI answers
 
@@ -559,22 +567,27 @@ Outputs for a **Choice**:
    labelled with the route's **Name**.
 2. When **Confidence Handling** is *Route to Separate Fallback Output*, one
    further output labelled `Fallback` is appended last. An item goes
-   there when its confidence is below **Confidence Threshold**.
+   there when its confidence is below **Confidence Threshold** (default `0.7`).
 3. When it is *Always Route*, there is no extra output and every
    item follows the chosen route.
 
 Outputs for a **Noul**, in this order:
 
 4. One output for a yes, labelled with **True Means** or `True` when that is
-   blank. An item goes there when its value is at or above the **True
-   Probability Threshold**.
-5. One output for a no, labelled with **False Means** or `False` when that is
-   blank. An item goes there when its value is at or below the **False
-   Probability Threshold**.
-6. When the thresholds leave a gap between them, one further output labelled
-   `Uncertain` is appended last, and an item whose value falls in the gap goes
-   there. With the thresholds equal there is no gap, no third output, and every
-   item is a yes or a no.
+   blank, and one output for a no, labelled with **False Means** or `False`.
+   Confidence is `|p − 0.5| × 2` with the same **Confidence Threshold** as a
+   Choice (default `0.7`): `confidence ≥ c` is exactly `p ≥ 0.5 + c/2`
+   (true) or `p ≤ 0.5 − c/2` (false). A confidence exactly on the threshold
+   is not low confidence.
+5. When **Confidence Handling** is *Route to Separate Low Confidence Output*,
+   one further output labelled `Low Confidence` is appended last, and an item
+   whose confidence is below the threshold goes there. Otherwise an item goes
+   to True when `p > 0.5` and to False when `p ≤ 0.5`.
+6. In node version 1 only, two probability thresholds decided the outputs
+   instead: at or above **True Probability Threshold** went to True, at or
+   below **False Probability Threshold** went to False, and a gap between
+   them added an `Uncertain` output last for values in between. Version 1
+   workflows keep this behaviour; it MUST NOT be offered in version 2.
 
 Outputs for a **Score**:
 
@@ -584,6 +597,11 @@ Outputs for a **Score**:
    *i* − 0.5 up to, but not including, *i* + 0.5. A score exactly halfway goes
    to the higher level. A score below the lowest level or above the highest
    goes to that end. A score that is not a finite number is an error.
+9. In node version 2, when **Confidence Handling** is *Route to Separate Low
+   Confidence Output*, one further output labelled `Low Confidence` is
+   appended after the levels, and an item whose confidence is below
+   **Confidence Threshold** goes there. Without it every item goes to its
+   nearest level.
 
 Score, simplified:
 
@@ -591,7 +609,7 @@ Score, simplified:
 { "route": { "score": 1.3, "confidence": 0.9 }, "model": "jev-1.13.0" }
 ```
 
-9. The outputs shown in the editor MUST match those produced at runtime.
+10. The outputs shown in the editor MUST match those produced at runtime.
 
 ### 8.4 Common rules
 
@@ -629,11 +647,18 @@ failure below.
 
 When the workflow enables it, a failing item MUST be emitted with an `error`
 field, and processing MUST continue with the remaining items. It goes to the
-`Fallback` output where one is enabled, so that a failure is never
-mistaken for a routing decision, and to the first output otherwise. Routing by
-a Noul has no Fallback, so a failing item goes to the last output there —
-`Uncertain` where one exists, and the no output otherwise. Routing by a Score
-has neither, so a failing item goes to the first output.
+low-confidence output where one is enabled, so that a failure is never
+mistaken for a routing decision, and to the first output otherwise:
+
+| Operation | Output the failed item goes to |
+| --- | --- |
+| Evaluate, Low Confidence Output | `Low Confidence` |
+| Evaluate, otherwise | The main output |
+| Route, Choice | `Fallback` if there is one, otherwise the first route |
+| Route, Noul (Yes/No) v2 | `Low Confidence` if there is one, otherwise False |
+| Route, Noul (Yes/No) v1 | `Uncertain` where one exists, and the no output otherwise |
+| Route, Score v2 | `Low Confidence` if there is one, otherwise the first level |
+| Route, Score v1 | The first level |
 **Include Other Input Fields** applies to it as it does to any other item.
 The failing item MUST carry the error itself as well as the `error` field, so
 that n8n's **Continue (using error output)** setting moves it to the error

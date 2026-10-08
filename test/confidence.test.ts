@@ -21,11 +21,21 @@ describe('getConfidence', () => {
 		expect(getConfidence({ probability: 0.95 })).toBeCloseTo(0.9, 10);
 	});
 
+	it('returns 0 for a refusal', () => {
+		expect(getConfidence({ type: 'refusal' })).toBe(0);
+	});
+
 	it('returns undefined when there is no confidence source', () => {
 		expect(getConfidence({})).toBeUndefined();
-		expect(getConfidence({ type: 'refusal' })).toBeUndefined();
+		expect(getConfidence({ type: 'choice', choice: 'a' })).toBeUndefined();
+		expect(getConfidence({ type: 'score', score: 1 })).toBeUndefined();
 		expect(getConfidence(null)).toBeUndefined();
 		expect(getConfidence(undefined)).toBeUndefined();
+	});
+
+	it('rounds float noise so 0.55 derives exactly 0.1', () => {
+		expect(getConfidence({ noul: 0.55 })).toBe(0.1);
+		expect(getConfidence({ probability: 0.55 })).toBe(0.1);
 	});
 });
 
@@ -125,6 +135,46 @@ describe('enrichAnswers without confidence', () => {
 		expect(answers.q.lowConfidence).toBe(false);
 		expect(answers.q).not.toHaveProperty('confidence');
 		expect(lowConfidenceQuestions).toEqual([]);
+	});
+});
+
+describe('enrichAnswers refusal', () => {
+	it('marks a refusal as low confidence with confidence 0 and no value', () => {
+		for (const mode of ['bestGuess', 'lowConfidenceOutput'] as const) {
+			const { answers, lowConfidenceQuestions } = enrichAnswers(
+				{ q: { type: 'refusal' } },
+				mode,
+				0.7,
+			);
+			expect(answers.q).toMatchObject({ confidence: 0, lowConfidence: true });
+			expect(answers.q).not.toHaveProperty('value');
+			expect(lowConfidenceQuestions).toEqual(['q']);
+		}
+	});
+
+	it('marks a refusal as low confidence even with threshold 0', () => {
+		const { answers } = enrichAnswers({ q: { type: 'refusal' } }, 'bestGuess', 0);
+		expect(answers.q.lowConfidence).toBe(true);
+	});
+});
+
+describe('enrichAnswers stale value', () => {
+	it('drops a stale value for Choice and Score in Best Guess', () => {
+		const { answers } = enrichAnswers(
+			{
+				c: { choice: 'a', confidence: 0.4, value: true },
+				s: { score: 1, confidence: 0.9, value: false },
+			},
+			'bestGuess',
+			0.7,
+		);
+		expect(answers.c).not.toHaveProperty('value');
+		expect(answers.s).not.toHaveProperty('value');
+	});
+
+	it('drops value in Low Confidence Output mode', () => {
+		const { answers } = enrichAnswers({ q: { noul: 0.9, value: true } }, 'lowConfidenceOutput', 0.7);
+		expect(answers.q).not.toHaveProperty('value');
 	});
 });
 

@@ -314,7 +314,7 @@ export const decisionsProperties: INodeProperties[] = [
 				name: 'Best Guess',
 				value: 'bestGuess',
 				description:
-					'Always returns a definitive value. For Yes/No questions, exactly 0.5 resolves to false.',
+					'Always returns a definitive value for Yes/No questions. For Yes/No questions, exactly 0.5 resolves to false.',
 			},
 			{
 				name: 'Low Confidence Output',
@@ -334,7 +334,7 @@ export const decisionsProperties: INodeProperties[] = [
 			hide: { fallbackMode: ['disabled'] },
 		},
 		description:
-			'Answers with confidence below this are considered low confidence. For Yes/No questions, confidence is computed as |p − 0.5| × 2, so 0.85 → 0.70.',
+			'Answers with confidence below this are considered low confidence. For Yes/No questions, confidence is computed as |p − 0.5| × 2, so 0.85 → 0.70. A refusal always counts as low confidence. Choice and Score answers without a confidence value are treated as reliable.',
 	},
 	{
 		displayName: 'Question Type',
@@ -416,7 +416,9 @@ export const decisionsProperties: INodeProperties[] = [
 		type: 'options',
 		required: true,
 		default: 'bestOption',
-		displayOptions: { show: { operation: ['route'], routeQuestionType: ['choice'] } },
+		displayOptions: {
+			show: { operation: ['route'], routeQuestionType: ['choice'], '@version': [1] },
+		},
 		options: [
 			{
 				name: 'Always Route',
@@ -434,16 +436,63 @@ export const decisionsProperties: INodeProperties[] = [
 		displayName: 'Confidence Threshold',
 		name: 'confidenceThreshold',
 		type: 'number',
-		default: 0.5,
+		default: 0.7,
 		typeOptions: { minValue: 0, maxValue: 1, numberPrecision: 2 },
 		displayOptions: {
 			show: {
 				operation: ['route'],
 				routeQuestionType: ['choice'],
 				confidenceHandling: ['separateOutput'],
+				'@version': [1],
 			},
 		},
 		description: 'Items answered with less confidence than this go to the Fallback output',
+		hint: 'How sure the model needs to be before an item follows its route (0.0 - 1.0).<br /><a href="https://docs.typesafe.ai/confidence" target="_blank">See docs</a> for more information on how TypeSafe reports confidence.',
+	},
+	{
+		displayName: 'Confidence Handling',
+		name: 'confidenceHandling',
+		type: 'options',
+		required: true,
+		default: 'bestOption',
+		noDataExpression: true,
+		displayOptions: {
+			show: {
+				operation: ['route'],
+				routeQuestionType: ['choice', 'noul', 'score'],
+				'@version': [2],
+			},
+		},
+		description: 'How to handle answers with low confidence',
+		options: [
+			{
+				name: 'Always Route',
+				value: 'bestOption',
+				description: 'Send all items to the matching output, regardless of confidence',
+			},
+			{
+				name: 'Route to Separate Low Confidence Output',
+				value: 'separateOutput',
+				description: 'Send low-confidence items to an extra output',
+			},
+		],
+	},
+	{
+		displayName: 'Confidence Threshold',
+		name: 'confidenceThreshold',
+		type: 'number',
+		default: 0.7,
+		typeOptions: { minValue: 0, maxValue: 1, numberPrecision: 2 },
+		displayOptions: {
+			show: {
+				operation: ['route'],
+				routeQuestionType: ['choice', 'noul', 'score'],
+				confidenceHandling: ['separateOutput'],
+				'@version': [2],
+			},
+		},
+		description:
+			'Answers with confidence below this are considered low confidence. For Yes/No questions, confidence is computed as |p − 0.5| × 2, so 0.85 → 0.70.',
 		hint: 'How sure the model needs to be before an item follows its route (0.0 - 1.0).<br /><a href="https://docs.typesafe.ai/confidence" target="_blank">See docs</a> for more information on how TypeSafe reports confidence.',
 	},
 	{
@@ -463,7 +512,9 @@ export const decisionsProperties: INodeProperties[] = [
 		default: 0.5,
 		noDataExpression: true,
 		typeOptions: { minValue: 0, maxValue: 1, numberPrecision: 2 },
-		displayOptions: { show: { operation: ['route'], routeQuestionType: ['noul'] } },
+		displayOptions: {
+			show: { operation: ['route'], routeQuestionType: ['noul'], '@version': [1] },
+		},
 		description: 'Items answered at or above this go to the True output',
 		hint: "Leave a gap above 'False Probability Threshold' to get an Uncertain output (0.0 - 1.0)",
 	},
@@ -484,7 +535,9 @@ export const decisionsProperties: INodeProperties[] = [
 		default: 0.5,
 		noDataExpression: true,
 		typeOptions: { minValue: 0, maxValue: 1, numberPrecision: 2 },
-		displayOptions: { show: { operation: ['route'], routeQuestionType: ['noul'] } },
+		displayOptions: {
+			show: { operation: ['route'], routeQuestionType: ['noul'], '@version': [1] },
+		},
 		description: 'Items answered at or below this go to the False output',
 		hint: "Must not be above 'True Probability Threshold' (0.0 - 1.0)",
 	},

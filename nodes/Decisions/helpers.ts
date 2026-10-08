@@ -62,7 +62,7 @@ export function buildCriteriaMap(
 	noun: string,
 	where: string,
 ): IDataObject {
-	const criteria: IDataObject = Object.create(null);
+	const criteria: IDataObject = {};
 	for (const entry of entries) {
 		const name = (entry.name ?? '').trim();
 		if (name === '') {
@@ -146,7 +146,7 @@ export function buildQuestionsFromEntries(
 	if (entries.length === 0) {
 		fail(context, "'Questions' is empty", 'Add at least one question');
 	}
-	const questions: IDataObject = Object.create(null);
+	const questions: IDataObject = {};
 	for (const entry of entries) {
 		const id = (entry.id ?? '').trim();
 		if (id === '') {
@@ -212,7 +212,12 @@ export function simplifyAnswers(answers: Record<string, Answer>): IDataObject {
 	);
 }
 
-/** Serialized method used in expression, must not use any externally defined variables */
+/** Serialized method used in expression, must not use any externally defined variables.
+ * Noul has two generations: v1 uses the true/false probability thresholds (an
+ * `Uncertain` output when they leave a gap); v2 reuses `confidenceHandling`
+ * like Choice/Score (a `Low Confidence` output when set to `separateOutput`).
+ * The v2 path wins when `separateOutput` is set, so old workflows without that
+ * parameter keep their v1 outputs. */
 export const configuredOutputs = (
 	parameters: {
 		operation?: string;
@@ -241,6 +246,10 @@ export const configuredOutputs = (
 			{ type: 'main', displayName: (parameters.routeTrueMeans ?? '').trim() || 'True' },
 			{ type: 'main', displayName: (parameters.routeFalseMeans ?? '').trim() || 'False' },
 		];
+		if (parameters.confidenceHandling === 'separateOutput') {
+			outputs.push({ type: 'main', displayName: 'Low Confidence' });
+			return outputs;
+		}
 		const trueThreshold = parameters.trueThreshold ?? 0.5;
 		const falseThreshold = parameters.falseThreshold ?? 0.5;
 		if (trueThreshold > falseThreshold) {
@@ -254,10 +263,14 @@ export const configuredOutputs = (
 		if (levels.length === 0) {
 			return [{ type: 'main' }];
 		}
-		return levels.map(({ level }, index) => ({
+		const outputs = levels.map(({ level }, index) => ({
 			type: 'main',
 			displayName: (level ?? '').trim() || `Level ${index}`,
 		}));
+		if (parameters.confidenceHandling === 'separateOutput') {
+			outputs.push({ type: 'main', displayName: 'Low Confidence' });
+		}
+		return outputs;
 	}
 	const routes = parameters.routes?.route ?? [];
 	const outputs = routes

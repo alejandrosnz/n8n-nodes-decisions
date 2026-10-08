@@ -290,6 +290,66 @@ describe('configuredOutputs', () => {
 		).toHaveLength(2);
 	});
 
+	it('prefers the v2 Low Confidence output over the v1 thresholds when both are set', () => {
+		expect(
+			configuredOutputs({
+				operation: 'route',
+				routeQuestionType: 'noul',
+				confidenceHandling: 'separateOutput',
+				trueThreshold: 0.8,
+				falseThreshold: 0.2,
+			}),
+		).toEqual([
+			{ type: 'main', displayName: 'True' },
+			{ type: 'main', displayName: 'False' },
+			{ type: 'main', displayName: 'Low Confidence' },
+		]);
+	});
+
+	it('adds a Low Confidence output to Noul v2 when a separate output is enabled', () => {
+		expect(
+			configuredOutputs({
+				operation: 'route',
+				routeQuestionType: 'noul',
+				routeTrueMeans: 'Needs a reply today',
+				routeFalseMeans: 'Can wait',
+				confidenceHandling: 'separateOutput',
+			}),
+		).toEqual([
+			{ type: 'main', displayName: 'Needs a reply today' },
+			{ type: 'main', displayName: 'Can wait' },
+			{ type: 'main', displayName: 'Low Confidence' },
+		]);
+	});
+
+	it('keeps two outputs for Noul v2 without a separate output', () => {
+		expect(
+			configuredOutputs({
+				operation: 'route',
+				routeQuestionType: 'noul',
+				confidenceHandling: 'bestOption',
+			}),
+		).toEqual([
+			{ type: 'main', displayName: 'True' },
+			{ type: 'main', displayName: 'False' },
+		]);
+	});
+
+	it('adds a Low Confidence output to Score v2 when a separate output is enabled', () => {
+		expect(
+			configuredOutputs({
+				operation: 'route',
+				routeQuestionType: 'score',
+				routeLevels: { level: [{ level: 'Calm' }, { level: 'Furious' }] },
+				confidenceHandling: 'separateOutput',
+			}),
+		).toEqual([
+			{ type: 'main', displayName: 'Calm' },
+			{ type: 'main', displayName: 'Furious' },
+			{ type: 'main', displayName: 'Low Confidence' },
+		]);
+	});
+
 	it('gives a Score one output per level, labelled with its text', () => {
 		expect(
 			configuredOutputs({

@@ -6,6 +6,17 @@ package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Changed
+
+- **Unified confidence (node version 2, breaking for Route Noul).** Route Noul no longer uses **True/False Probability Thresholds** or an `Uncertain` output. All three question types share one **Confidence Handling** / **Confidence Threshold** (default `0.7`): Yes/No confidence is `|p − 0.5| × 2`, so `confidence ≥ c` is exactly `p ≥ 0.5 + c/2` (true) or `p ≤ 0.5 − c/2` (false). An unsure item goes to a `Low Confidence` output when enabled, otherwise Noul follows `p > 0.5`. Score also gains an optional `Low Confidence` output. Workflows saved with node version 1 keep running with the old thresholds. Asymmetric v1 threshold gaps cannot be expressed as a single confidence threshold.
+- Evaluate failures with **Low Confidence Output** now go to the `Low Confidence` output instead of the main output.
+- **Confidence Threshold** values outside 0–1, or not a finite number, are now errors instead of silently disabling the filter. **Fallback Mode** must resolve to the same value for every item in a run.
+- A refusal now counts as low confidence (`confidence: 0`, no `value`) instead of being treated as reliable.
+
+### Removed
+
+- **True Probability Threshold** and **False Probability Threshold** are not offered in node version 2.
+
 ### Added
 
 - Low confidence handling in Evaluate, via **Fallback Mode** (`Disabled`, `Best Guess`, `Low Confidence Output`) and **Confidence Threshold** (default `0.7`). Best Guess adds `confidence`, `lowConfidence` and, for Yes/No questions, `value` (`noul > 0.5`, so exactly `0.5` resolves to `false`). Low Confidence Output adds a second output and routes items with any low-confidence answer there, adding item-level `lowConfidence` and `lowConfidenceQuestions`. Yes/No confidence is derived as `|p − 0.5| × 2`.

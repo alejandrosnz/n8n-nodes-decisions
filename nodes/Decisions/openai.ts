@@ -110,7 +110,7 @@ export function fromOpenAiResponse(
 				`OpenAI returned ${raw.answers.length} answers for ${sentNames.length} questions`,
 			);
 		}
-		answers = Object.create(null) as Record<string, Answer>;
+		answers = {} as Record<string, Answer>;
 		raw.answers.forEach((entry, i) => {
 			if (typeof entry !== 'object' || entry === null) {
 				throw new Error(`OpenAI answer #${i} is not an object`);
@@ -128,7 +128,7 @@ export function fromOpenAiResponse(
 	} else if (typeof raw.answers === 'object' && raw.answers !== null) {
 		answers = raw.answers as Record<string, Answer>;
 	} else {
-		answers = Object.create(null) as Record<string, Answer>;
+		answers = {} as Record<string, Answer>;
 	}
 	const model = typeof raw.model === 'string' && raw.model !== '' ? raw.model : requestedModel;
 	const response: DecisionsResponse = { model, answers };
