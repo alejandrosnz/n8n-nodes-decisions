@@ -17,6 +17,12 @@ describe('getConfidence', () => {
 		expect(getConfidence({ score: 1.2, confidence: 0.71 })).toBe(0.71);
 	});
 
+	it('passes API confidence through without rounding', () => {
+		const noisy = 0.1 + 0.2;
+		expect(noisy).not.toBe(0.3);
+		expect(getConfidence({ choice: 'a', confidence: noisy })).toBe(noisy);
+	});
+
 	it('derives confidence for predicate answers like Noul', () => {
 		expect(getConfidence({ probability: 0.95 })).toBeCloseTo(0.9, 10);
 	});
@@ -135,6 +141,35 @@ describe('enrichAnswers without confidence', () => {
 		expect(answers.q.lowConfidence).toBe(false);
 		expect(answers.q).not.toHaveProperty('confidence');
 		expect(lowConfidenceQuestions).toEqual([]);
+	});
+});
+
+describe('enrichAnswers with a separate confidence source', () => {
+	it('detects a refusal from the raw answers even when the display lost its type', () => {
+		const { answers, lowConfidenceQuestions } = enrichAnswers(
+			{ q: { choice: 'a' } },
+			'bestGuess',
+			0.7,
+			{ q: { type: 'refusal' } },
+		);
+		expect(answers.q).toMatchObject({ confidence: 0, lowConfidence: true });
+		expect(answers.q).not.toHaveProperty('value');
+		expect(lowConfidenceQuestions).toEqual(['q']);
+	});
+
+	it('derives predicate confidence and value from the raw answers', () => {
+		const { answers } = enrichAnswers(
+			{ q: { probability: 0.9 } },
+			'bestGuess',
+			0.7,
+			{ q: { type: 'predicate', probability: 0.9 } },
+		);
+		expect(answers.q).toMatchObject({
+			probability: 0.9,
+			confidence: 0.8,
+			lowConfidence: false,
+			value: true,
+		});
 	});
 });
 

@@ -302,6 +302,7 @@ export const decisionsProperties: INodeProperties[] = [
 		name: 'fallbackMode',
 		type: 'options',
 		default: 'disabled',
+		noDataExpression: true,
 		displayOptions: { show: { operation: ['evaluate'] } },
 		description: 'How to handle answers with low confidence',
 		options: [

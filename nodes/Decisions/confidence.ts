@@ -26,7 +26,7 @@ export function getConfidence(answer: ConfidenceSource | null | undefined): numb
 		return 0;
 	}
 	if (typeof answer.confidence === 'number' && Number.isFinite(answer.confidence)) {
-		return roundConfidence(answer.confidence);
+		return answer.confidence;
 	}
 	if (typeof answer.noul === 'number' && Number.isFinite(answer.noul)) {
 		return roundConfidence(Math.abs(answer.noul - 0.5) * 2);
@@ -46,6 +46,10 @@ export interface EnrichedAnswers {
  * The raw `noul`, `choice`, `score` and `probability` values are never modified.
  * In `disabled` mode the input map is returned unchanged.
  *
+ * Confidence is assessed on `confidenceSource` when given — the raw API
+ * answers — and on the answers themselves otherwise. Assessing the raw
+ * answers keeps refusal detection working even when simplifying drops `type`.
+ *
  * A refusal always counts as low confidence (confidence 0, no `value`).
  * Chaining two Decisions nodes recomputes these fields, overwriting any
  * `lowConfidence` / `lowConfidenceQuestions` / `value` the input already had. */
@@ -53,14 +57,15 @@ export function enrichAnswers(
 	answers: Record<string, IDataObject>,
 	mode: EvaluateFallbackMode,
 	threshold: number,
+	confidenceSource?: Record<string, ConfidenceSource>,
 ): EnrichedAnswers {
 	if (mode === 'disabled') {
 		return { answers, lowConfidenceQuestions: [] };
 	}
-	const enriched: Record<string, IDataObject> = {};
+	const enriched: Record<string, IDataObject> = Object.create(null);
 	const lowConfidenceQuestions: string[] = [];
 	for (const [id, answer] of Object.entries(answers)) {
-		const source = answer as ConfidenceSource;
+		const source = confidenceSource?.[id] ?? (answer as ConfidenceSource);
 		const isRefusal = source.type === 'refusal';
 		const confidence = getConfidence(source);
 		const lowConfidence = isRefusal

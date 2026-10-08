@@ -198,6 +198,29 @@ describe('fromOpenAiResponse', () => {
 		});
 	});
 
+	it('keeps a __proto__ answer name as its own key', () => {
+		const response = fromOpenAiResponse(
+			{ answers: [{ type: 'predicate', name: '__proto__', probability: 0.5 }] },
+			'gpt-6-luna',
+		);
+		expect(Object.keys(response.answers)).toEqual(['__proto__']);
+		expect(Object.hasOwn(response.answers, '__proto__')).toBe(true);
+	});
+
+	it('rejects a duplicated __proto__ answer name', () => {
+		expect(() =>
+			fromOpenAiResponse(
+				{
+					answers: [
+						{ type: 'predicate', name: '__proto__', probability: 0.9 },
+						{ type: 'predicate', name: '__proto__', probability: 0.1 },
+					],
+				},
+				'gpt-6-luna',
+			),
+		).toThrow(/Duplicate answer name '__proto__'/);
+	});
+
 	it('falls back to the requested model when none is reported', () => {
 		expect(fromOpenAiResponse({ answers: [] }, 'gpt-6-luna').model).toBe('gpt-6-luna');
 	});

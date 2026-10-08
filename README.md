@@ -135,9 +135,9 @@ Route asks one question and sends the item to the output that matches the answer
 | Noul (Yes/No) | True and False, labelled with **True Means** and **False Means** if you fill them in | True if `p > 0.5`, False otherwise — or to `Low Confidence` when unsure, see below |
 | Score | One per level, labelled with the level's text | The level nearest the score |
 
-All three question types share one confidence model. Yes/No confidence is `|p − 0.5| × 2`, so a threshold `c` means `p ≥ 0.5 + c/2` (true) or `p ≤ 0.5 − c/2` (false). Set **Confidence Handling** to **Route to Separate Low Confidence Output** to add an extra output for unsure items (`Fallback` for Choice, `Low Confidence` for Noul and Score). An item goes there when its answer's confidence is below **Confidence Threshold** (default `0.7`).
+All three question types share one confidence model. Yes/No confidence is `|p − 0.5| × 2`, so a threshold `c` means `p ≥ 0.5 + c/2` (true) or `p ≤ 0.5 − c/2` (false). Set **Confidence Handling** to **Route to Separate Low Confidence Output** to add an extra output for unsure items (`Low Confidence` in version 2; `Fallback` for Choice in version 1). An item goes there when its answer's confidence is below **Confidence Threshold** (default `0.7` for all question types since version 2 — previously `0.5` for Choice routes). A Choice or Score answer without a confidence value is treated as reliable and follows its route or level.
 
-- **Choice: Fallback output.** Set **Confidence Handling** to **Route to Separate Fallback Output** to add a `Fallback` output. An item goes there when its answer's confidence is below **Confidence Threshold**.
+- **Choice: Fallback output.** Set **Confidence Handling** to **Route to Separate Low Confidence Output** to add a `Low Confidence` output (`Fallback` in version 1). An item goes there when its answer's confidence is below **Confidence Threshold**.
 - **Noul: Low Confidence output.** With a separate output enabled, an unsure item goes to `Low Confidence`. Without it, the item follows `p > 0.5`.
 - **Score: level boundaries.** Levels are numbered from 0, lowest first. The boundary between two levels is halfway between their numbers. A score from `0.5` to just under `1.5` goes to level 1, and a score exactly on a boundary goes to the higher level. With a separate output enabled, a low-confidence item goes to `Low Confidence` instead of its level.
 
@@ -186,7 +186,7 @@ To keep the workflow running when an item fails, set **On Error**:
 | Operation | Output the failed item goes to |
 | --- | --- |
 | Evaluate | The main output, or `Low Confidence` when **Low Confidence Output** is on |
-| Route, Choice | `Fallback` if there is one, otherwise the first route |
+| Route, Choice | `Low Confidence` (`Fallback` in version 1) if enabled, otherwise the first route |
 | Route, Noul (Yes/No) | `Low Confidence` if there is one, otherwise False (`Uncertain` if there is one, otherwise False, in version 1) |
 | Route, Score | `Low Confidence` if there is one, otherwise the first level |
 

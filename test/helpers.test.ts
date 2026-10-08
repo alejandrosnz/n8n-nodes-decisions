@@ -1,4 +1,4 @@
-import type { INode } from 'n8n-workflow';
+import type { IDataObject, INode } from 'n8n-workflow';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -139,6 +139,36 @@ describe('buildQuestionsFromEntries', () => {
 		expect(() => buildQuestionsFromEntries(context, [])).toThrow(
 			expect.objectContaining({ description: 'Add at least one question' }),
 		);
+	});
+
+	it('keeps a __proto__ question ID as its own key', () => {
+		const questions = buildQuestionsFromEntries(context, [
+			{ id: '__proto__', instructions: 'Urgent?', type: 'noul' },
+			{ id: 'constructor', instructions: 'Which team?', type: 'noul' },
+		]);
+		expect(Object.keys(questions)).toEqual(['__proto__', 'constructor']);
+		expect(Object.hasOwn(questions, '__proto__')).toBe(true);
+		expect((questions['__proto__'] as IDataObject).instructions).toBe('Urgent?');
+	});
+
+	it('rejects a duplicated __proto__ question ID', () => {
+		expect(() =>
+			buildQuestionsFromEntries(context, [
+				{ id: '__proto__', instructions: 'One', type: 'noul' },
+				{ id: '__proto__', instructions: 'Two', type: 'noul' },
+			]),
+		).toThrow(/used more than once/);
+	});
+
+	it('keeps a __proto__ option name as its own key', () => {
+		const criteria = buildCriteriaMap(
+			context,
+			[{ name: '__proto__' }, { name: 'constructor' }],
+			'option',
+			'Q',
+		);
+		expect(Object.keys(criteria)).toEqual(['__proto__', 'constructor']);
+		expect(Object.hasOwn(criteria, '__proto__')).toBe(true);
 	});
 
 	it('rejects an empty list', () => {
@@ -290,15 +320,18 @@ describe('configuredOutputs', () => {
 		).toHaveLength(2);
 	});
 
-	it('prefers the v2 Low Confidence output over the v1 thresholds when both are set', () => {
+	it('prefers the v2 Low Confidence output over stale v1 thresholds', () => {
 		expect(
-			configuredOutputs({
-				operation: 'route',
-				routeQuestionType: 'noul',
-				confidenceHandling: 'separateOutput',
-				trueThreshold: 0.8,
-				falseThreshold: 0.2,
-			}),
+			configuredOutputs(
+				{
+					operation: 'route',
+					routeQuestionType: 'noul',
+					confidenceHandling: 'separateOutput',
+					trueThreshold: 0.8,
+					falseThreshold: 0.2,
+				},
+				2,
+			),
 		).toEqual([
 			{ type: 'main', displayName: 'True' },
 			{ type: 'main', displayName: 'False' },
@@ -306,15 +339,54 @@ describe('configuredOutputs', () => {
 		]);
 	});
 
+	it('ignores stale thresholds in v2 without a separate output', () => {
+		expect(
+			configuredOutputs(
+				{
+					operation: 'route',
+					routeQuestionType: 'noul',
+					trueThreshold: 0.8,
+					falseThreshold: 0.2,
+				},
+				2,
+			),
+		).toEqual([
+			{ type: 'main', displayName: 'True' },
+			{ type: 'main', displayName: 'False' },
+		]);
+	});
+
+	it('ignores a stale confidenceHandling residue in v1 Noul', () => {
+		expect(
+			configuredOutputs(
+				{
+					operation: 'route',
+					routeQuestionType: 'noul',
+					confidenceHandling: 'separateOutput',
+					trueThreshold: 0.8,
+					falseThreshold: 0.2,
+				},
+				1,
+			),
+		).toEqual([
+			{ type: 'main', displayName: 'True' },
+			{ type: 'main', displayName: 'False' },
+			{ type: 'main', displayName: 'Uncertain' },
+		]);
+	});
+
 	it('adds a Low Confidence output to Noul v2 when a separate output is enabled', () => {
 		expect(
-			configuredOutputs({
-				operation: 'route',
-				routeQuestionType: 'noul',
-				routeTrueMeans: 'Needs a reply today',
-				routeFalseMeans: 'Can wait',
-				confidenceHandling: 'separateOutput',
-			}),
+			configuredOutputs(
+				{
+					operation: 'route',
+					routeQuestionType: 'noul',
+					routeTrueMeans: 'Needs a reply today',
+					routeFalseMeans: 'Can wait',
+					confidenceHandling: 'separateOutput',
+				},
+				2,
+			),
 		).toEqual([
 			{ type: 'main', displayName: 'Needs a reply today' },
 			{ type: 'main', displayName: 'Can wait' },
@@ -324,11 +396,14 @@ describe('configuredOutputs', () => {
 
 	it('keeps two outputs for Noul v2 without a separate output', () => {
 		expect(
-			configuredOutputs({
-				operation: 'route',
-				routeQuestionType: 'noul',
-				confidenceHandling: 'bestOption',
-			}),
+			configuredOutputs(
+				{
+					operation: 'route',
+					routeQuestionType: 'noul',
+					confidenceHandling: 'bestOption',
+				},
+				2,
+			),
 		).toEqual([
 			{ type: 'main', displayName: 'True' },
 			{ type: 'main', displayName: 'False' },
@@ -337,17 +412,57 @@ describe('configuredOutputs', () => {
 
 	it('adds a Low Confidence output to Score v2 when a separate output is enabled', () => {
 		expect(
-			configuredOutputs({
-				operation: 'route',
-				routeQuestionType: 'score',
-				routeLevels: { level: [{ level: 'Calm' }, { level: 'Furious' }] },
-				confidenceHandling: 'separateOutput',
-			}),
+			configuredOutputs(
+				{
+					operation: 'route',
+					routeQuestionType: 'score',
+					routeLevels: { level: [{ level: 'Calm' }, { level: 'Furious' }] },
+					confidenceHandling: 'separateOutput',
+				},
+				2,
+			),
 		).toEqual([
 			{ type: 'main', displayName: 'Calm' },
 			{ type: 'main', displayName: 'Furious' },
 			{ type: 'main', displayName: 'Low Confidence' },
 		]);
+	});
+
+	it('ignores a stale confidenceHandling residue in v1 Score', () => {
+		expect(
+			configuredOutputs(
+				{
+					operation: 'route',
+					routeQuestionType: 'score',
+					routeLevels: { level: [{ level: 'Calm' }, { level: 'Furious' }] },
+					confidenceHandling: 'separateOutput',
+				},
+				1,
+			),
+		).toEqual([
+			{ type: 'main', displayName: 'Calm' },
+			{ type: 'main', displayName: 'Furious' },
+		]);
+	});
+
+	it('labels the Choice extra output Low Confidence in v2 and Fallback in v1', () => {
+		const parameters = {
+			operation: 'route',
+			routes: { route: [{ name: 'billing' }, { name: 'technical' }] },
+			confidenceHandling: 'separateOutput',
+		} as const;
+		expect(configuredOutputs({ ...parameters }, 2)[2]).toEqual({
+			type: 'main',
+			displayName: 'Low Confidence',
+		});
+		expect(configuredOutputs({ ...parameters }, 1)[2]).toEqual({
+			type: 'main',
+			displayName: 'Fallback',
+		});
+		expect(configuredOutputs({ ...parameters })[2]).toEqual({
+			type: 'main',
+			displayName: 'Fallback',
+		});
 	});
 
 	it('gives a Score one output per level, labelled with its text', () => {

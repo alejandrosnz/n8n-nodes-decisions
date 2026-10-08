@@ -2,6 +2,7 @@ import type { IExecuteFunctions, INode, INodeExecutionData } from 'n8n-workflow'
 import { describe, expect, it, vi } from 'vitest';
 
 import { Decisions } from '../nodes/Decisions/Decisions.node';
+import { configuredOutputs } from '../nodes/Decisions/helpers';
 
 const baseNode: INode = {
 	id: 'a',
@@ -247,6 +248,36 @@ describe('Route Choice and Score share the v2 threshold', () => {
 		expect(outputs).toHaveLength(3);
 		expect(outputs[1][0].json.route).toEqual({ score: 1.3, confidence: 0.1 });
 	});
+
+	it('treats a Choice without confidence as reliable', async () => {
+		const { functions } = createFunctions(choiceV2, () => ({
+			statusCode: 200,
+			body: {
+				model: 'jev-1.13.0',
+				answers: { route: { type: 'choice', choice: 'billing' } },
+				usage: { input_tokens: 1, output_tokens: 1 },
+			},
+		}));
+		const outputs = await Decisions.prototype.execute.call(functions);
+		expect(outputs).toHaveLength(3);
+		expect(outputs[0][0].json.route).toEqual({ choice: 'billing' });
+		expect(outputs[2]).toHaveLength(0);
+	});
+
+	it('treats a Score without confidence as reliable', async () => {
+		const { functions } = createFunctions(scoreV2, () => ({
+			statusCode: 200,
+			body: {
+				model: 'jev-1.13.0',
+				answers: { route: { type: 'score', score: 1.3 } },
+				usage: { input_tokens: 1, output_tokens: 1 },
+			},
+		}));
+		const outputs = await Decisions.prototype.execute.call(functions);
+		expect(outputs).toHaveLength(4);
+		expect(outputs[1][0].json.route).toEqual({ score: 1.3 });
+		expect(outputs[3]).toHaveLength(0);
+	});
 });
 
 describe('Route v1 workflows keep working', () => {
@@ -298,5 +329,193 @@ describe('Route v1 workflows keep working', () => {
 		);
 		const outputs = await Decisions.prototype.execute.call(functions);
 		expect(outputs[2][0].json.route).toEqual({ choice: 'billing', confidence: 0.6 });
+	});
+});
+
+describe('Editor/runtime output parity', () => {
+	interface EditorParameters {
+		operation?: string;
+		routeQuestionType?: string;
+		routes?: { route?: Array<{ name?: string }> };
+		routeLevels?: { level?: Array<{ level?: string }> };
+		confidenceHandling?: string;
+		confidenceThreshold?: number;
+		routeTrueMeans?: string;
+		routeFalseMeans?: string;
+		trueThreshold?: number;
+		falseThreshold?: number;
+		fallbackMode?: string;
+	}
+
+	/** The flat node parameters the editor shape translates to at runtime */
+	function toNodeParameters(editor: EditorParameters): Record<string, unknown> {
+		return {
+			operation: editor.operation ?? 'evaluate',
+			model: 'jev-latest',
+			stateFormat: 'inputItem',
+			routeQuestionType: editor.routeQuestionType ?? 'choice',
+			routeInstructions: 'Decide',
+			'routes.route': editor.routes?.route ?? [],
+			'routeLevels.level': editor.routeLevels?.level ?? [],
+			confidenceHandling: editor.confidenceHandling ?? 'bestOption',
+			confidenceThreshold: editor.confidenceThreshold ?? 0.7,
+			routeTrueMeans: editor.routeTrueMeans ?? '',
+			routeFalseMeans: editor.routeFalseMeans ?? '',
+			trueThreshold: editor.trueThreshold ?? 0.5,
+			falseThreshold: editor.falseThreshold ?? 0.5,
+			fallbackMode: editor.fallbackMode ?? 'disabled',
+			'questions.question': [{ id: 'q', instructions: 'Q?', type: 'noul' }],
+		};
+	}
+
+	const answerFor = (editor: EditorParameters) => () => ({
+		statusCode: 200,
+		body: {
+			model: 'jev-1.13.0',
+			answers:
+				editor.operation === 'route' && editor.routeQuestionType === 'score'
+					? { route: { type: 'score', score: 1.3, confidence: 0.9 } }
+					: editor.operation === 'route' && editor.routeQuestionType === 'noul'
+						? { route: { type: 'noul', noul: 0.9 } }
+						: editor.operation === 'route'
+							? { route: { type: 'choice', choice: 'billing', confidence: 0.9 } }
+							: { q: { type: 'noul', noul: 0.9 } },
+			usage: { input_tokens: 1, output_tokens: 1 },
+		},
+	});
+
+	const routes = { route: [{ name: 'billing' }, { name: 'technical' }] };
+	const levels = { level: [{ level: 'Calm' }, { level: 'Frustrated' }, { level: 'Furious' }] };
+
+	const cases: Array<{ name: string; version: number; editor: EditorParameters }> = [
+		{ name: 'evaluate disabled', version: 1, editor: { operation: 'evaluate' } },
+		{ name: 'evaluate disabled v2', version: 2, editor: { operation: 'evaluate' } },
+		{
+			name: 'evaluate bestGuess',
+			version: 2,
+			editor: { operation: 'evaluate', fallbackMode: 'bestGuess' },
+		},
+		{
+			name: 'evaluate lowConfidenceOutput',
+			version: 2,
+			editor: { operation: 'evaluate', fallbackMode: 'lowConfidenceOutput' },
+		},
+		{
+			name: 'choice bestOption v1',
+			version: 1,
+			editor: { operation: 'route', routeQuestionType: 'choice', routes },
+		},
+		{
+			name: 'choice separate v1',
+			version: 1,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'choice',
+				routes,
+				confidenceHandling: 'separateOutput',
+			},
+		},
+		{
+			name: 'choice separate v2',
+			version: 2,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'choice',
+				routes,
+				confidenceHandling: 'separateOutput',
+			},
+		},
+		{
+			name: 'noul v1 with gap',
+			version: 1,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'noul',
+				trueThreshold: 0.8,
+				falseThreshold: 0.2,
+			},
+		},
+		{
+			name: 'noul v1 without gap',
+			version: 1,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'noul',
+				trueThreshold: 0.5,
+				falseThreshold: 0.5,
+			},
+		},
+		{
+			name: 'noul v2 separate',
+			version: 2,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'noul',
+				confidenceHandling: 'separateOutput',
+			},
+		},
+		{
+			name: 'noul v2 bestOption',
+			version: 2,
+			editor: { operation: 'route', routeQuestionType: 'noul' },
+		},
+		{
+			name: 'noul v2 with stale thresholds and no separate output',
+			version: 2,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'noul',
+				trueThreshold: 0.8,
+				falseThreshold: 0.2,
+			},
+		},
+		{
+			name: 'noul v1 with handling residue and gap',
+			version: 1,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'noul',
+				confidenceHandling: 'separateOutput',
+				trueThreshold: 0.8,
+				falseThreshold: 0.2,
+			},
+		},
+		{
+			name: 'score v1',
+			version: 1,
+			editor: { operation: 'route', routeQuestionType: 'score', routeLevels: levels },
+		},
+		{
+			name: 'score v2 separate',
+			version: 2,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'score',
+				routeLevels: levels,
+				confidenceHandling: 'separateOutput',
+			},
+		},
+		{
+			name: 'score v2 bestOption',
+			version: 2,
+			editor: { operation: 'route', routeQuestionType: 'score', routeLevels: levels },
+		},
+		{
+			name: 'score v1 with handling residue',
+			version: 1,
+			editor: {
+				operation: 'route',
+				routeQuestionType: 'score',
+				routeLevels: levels,
+				confidenceHandling: 'separateOutput',
+			},
+		},
+	];
+
+	it.each(cases)('$name: execute output count matches configuredOutputs', async ({ editor, version }) => {
+		const editorCount = configuredOutputs(editor, version).length;
+		const { functions } = createFunctions(toNodeParameters(editor), answerFor(editor), version);
+		const outputs = await Decisions.prototype.execute.call(functions);
+		expect(outputs).toHaveLength(editorCount);
 	});
 });

@@ -120,7 +120,7 @@ carry the node's light and dark icons.
 | Display name | `Decisions` |
 | Identifier | `decisions` |
 | Group | `transform` |
-| Version | `2` (`1` still runs for existing workflows, see §5.5 and §8.3) |
+| Version | `1, 2` (new nodes use `2`; see §5.5 and §8.3) |
 | Description | `Ask Decisions API typed questions and get calibrated probabilities` |
 | Default instance name | `Decisions` |
 | Subtitle | The selected operation |
@@ -289,7 +289,7 @@ Evaluate also offers global low-confidence handling (see §8.1b):
 
 | Label | Required | Default | Shown when | Meaning |
 | --- | --- | --- | --- | --- |
-| Fallback Mode | no | Disabled | Evaluate | Disabled, Best Guess or Low Confidence Output. Must be the same for every item in a run. |
+| Fallback Mode | no | Disabled | Evaluate | Disabled, Best Guess or Low Confidence Output. Not settable by expression. |
 | Confidence Threshold | no | `0.7` | Evaluate, and Fallback Mode is not Disabled | Range 0–1. Answers with confidence below this are low confidence. Must be a finite number in range; anything else is an error. |
 
 The threshold is global; there is no per-question override. A non-finite threshold, or one outside 0–1 (for example from an expression resolving to `NaN`), MUST be reported as a configuration problem per §7 rather than silently disabling the filter.
@@ -330,9 +330,10 @@ A route's **Name**, a level's **Level**, the **Question Type**, both meanings,
 be settable by expression. Between them they decide how many outputs
 the node has and what each is called, and that is resolved in the editor before
 the workflow runs. **Confidence Threshold** values do not
-change the output count, so they MAY be set by expression. **Fallback Mode** MAY
-be set by expression but MUST resolve to the same value for every item in a run;
-a value that differs between items is an error.
+change the output count, so they MAY be set by expression. **Fallback Mode**
+MUST NOT be settable by expression either, since it decides whether Evaluate
+has one output or two. The per-item agreement check remains as a runtime
+defense.
 
 A route is a Choice option, so by §5 rule 3 its fields carry the same labels as
 an option's.
@@ -461,7 +462,7 @@ One output item per input item:
 ### 8.1b Evaluate low-confidence handling
 
 Fallback Mode selects how Evaluate handles low-confidence answers. It operates
-on the API response, so questions built in the UI and Raw JSON behave alike.
+on the raw API response, before Simplify, so questions built in the UI and Raw JSON behave alike.
 The raw `noul`, `choice`, `score` and `probability` values MUST never be
 modified.
 
@@ -565,9 +566,11 @@ Outputs for a **Choice**:
 
 1. One output per configured route, in the order the routes are listed,
    labelled with the route's **Name**.
-2. When **Confidence Handling** is *Route to Separate Fallback Output*, one
-   further output labelled `Fallback` is appended last. An item goes
-   there when its confidence is below **Confidence Threshold** (default `0.7`).
+2. When **Confidence Handling** is *Route to Separate Low Confidence Output*,
+   one further output is appended last: labelled `Low Confidence` in version 2
+   (`Fallback` in version 1). An item goes there when its confidence is below
+   **Confidence Threshold** (default `0.7`). An answer with no confidence
+   source is treated as reliable and follows its route, like in Evaluate.
 3. When it is *Always Route*, there is no extra output and every
    item follows the chosen route.
 
@@ -601,7 +604,8 @@ Outputs for a **Score**:
    Confidence Output*, one further output labelled `Low Confidence` is
    appended after the levels, and an item whose confidence is below
    **Confidence Threshold** goes there. Without it every item goes to its
-   nearest level.
+   nearest level. An answer without a confidence source is treated as reliable
+   and goes to its nearest level.
 
 Score, simplified:
 

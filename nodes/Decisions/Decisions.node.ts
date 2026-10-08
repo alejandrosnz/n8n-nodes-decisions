@@ -144,14 +144,14 @@ function readConfidenceThreshold(
 	return threshold;
 }
 
-/** The index of the output a Choice answer routes to */
+/** The index of the output a Choice answer routes to.
+ * An answer without a confidence source is treated as reliable, like Evaluate. */
 function resolveChoiceRoute(
-	functions: IExecuteFunctions,
 	context: ItemContext,
 	answer: ChoiceAnswer | RefusalAnswer | undefined,
 	routeNames: string[],
 	separateLowConfidence: boolean,
-	defaultThreshold: number,
+	threshold: number,
 ): number {
 	if (answer?.type === 'refusal') {
 		fail(context, 'The model refused to answer the route question');
@@ -161,8 +161,12 @@ function resolveChoiceRoute(
 	if (targetIndex === -1) {
 		fail(context, `The model answered "${chosen}", which is not one of the configured routes`);
 	}
-	const threshold = readConfidenceThreshold(functions, context, defaultThreshold);
-	const lowConfidence = separateLowConfidence && (answer?.confidence ?? 0) < threshold;
+	const confidence = answer?.type === 'choice' ? answer.confidence : undefined;
+	const lowConfidence =
+		separateLowConfidence &&
+		confidence !== undefined &&
+		Number.isFinite(confidence) &&
+		confidence < threshold;
 	return lowConfidence ? routeNames.length : targetIndex;
 }
 
@@ -196,11 +200,10 @@ function resolveNoulRoute(
  * |p − 0.5| × 2, so confidence ≥ c means p ≥ 0.5 + c/2 (true) or
  * p ≤ 0.5 − c/2 (false). A confidence exactly on the threshold is not low. */
 function resolveNoulRouteV2(
-	functions: IExecuteFunctions,
 	context: ItemContext,
 	answer: NoulAnswer | PredicateAnswer | RefusalAnswer | undefined,
 	separateLowConfidence: boolean,
-	defaultThreshold: number,
+	threshold: number,
 ): number {
 	if (answer === undefined) {
 		fail(context, 'The model returned no answer for this route');
@@ -212,7 +215,6 @@ function resolveNoulRouteV2(
 	if (typeof probability !== 'number' || !Number.isFinite(probability)) {
 		fail(context, 'The model returned a probability that is not a number');
 	}
-	const threshold = readConfidenceThreshold(functions, context, defaultThreshold);
 	const confidence = getConfidence(
 		answer.type === 'predicate' ? { probability } : { noul: probability },
 	);
@@ -225,15 +227,15 @@ function resolveNoulRouteV2(
 /** The index of the output a Score answer routes to: its nearest level.
  * With `rejectOutOfRange` a score outside the levels is an error instead of
  * going to the nearest end, so an unverified score scale cannot misroute.
- * In version 2 a separate low-confidence output appends last, after the levels. */
+ * In version 2 a separate low-confidence output appends last, after the levels.
+ * An answer without a confidence source is treated as reliable, like Evaluate. */
 function resolveScoreRoute(
-	functions: IExecuteFunctions,
 	context: ItemContext,
 	answer: ScoreAnswer | RefusalAnswer | undefined,
 	levelCount: number,
 	rejectOutOfRange: boolean,
 	separateLowConfidence: boolean,
-	defaultThreshold: number,
+	threshold: number,
 ): number {
 	if (answer === undefined) {
 		fail(context, 'The model returned no answer for this route');
@@ -253,8 +255,12 @@ function resolveScoreRoute(
 		);
 	}
 	if (separateLowConfidence) {
-		const threshold = readConfidenceThreshold(functions, context, defaultThreshold);
-		if ((answer.confidence ?? 0) < threshold) {
+		const confidence = answer.type === 'score' ? answer.confidence : undefined;
+		if (
+			confidence !== undefined &&
+			Number.isFinite(confidence) &&
+			confidence < threshold
+		) {
 			return levelCount;
 		}
 	}
@@ -329,13 +335,14 @@ export class Decisions implements INodeType {
 		name: 'decisions',
 		icon: { light: 'file:decisions.svg', dark: 'file:decisions.dark.svg' },
 		group: ['transform'],
-		version: 2,
+		version: [1, 2],
+		defaultVersion: 2,
 		subtitle: '={{ $parameter["operation"] }}',
 		description: 'Ask Decisions API typed questions and get calibrated probabilities',
 		defaults: { name: 'Decisions' },
 		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
-		outputs: `={{ (${configuredOutputs})($parameter) }}`,
+		outputs: `={{ (${configuredOutputs})($parameter, $nodeVersion) }}`,
 		credentials: [{ name: CREDENTIAL_NAME, required: true }],
 		properties: decisionsProperties,
 	};
@@ -390,15 +397,33 @@ export class Decisions implements INodeType {
 			}
 		}
 		const evaluateTwoOutputs = evaluateMode === 'lowConfidenceOutput';
-		const outputCount = isNoul
-			? 2 + (hasUncertain || separateLowConfidence ? 1 : 0)
-			: isScore
-				? levelCount + (separateLowConfidence ? 1 : 0)
-				: isRoute
-					? routeNames.length + (separateLowConfidence ? 1 : 0)
-					: evaluateTwoOutputs
-						? 2
-						: 1;
+		// The runtime output count is the editor output count by construction:
+		// the same function and the same parameter snapshot decide both.
+		const outputCount = configuredOutputs(
+			{
+				operation,
+				routeQuestionType: isRoute
+					? (this.getNodeParameter('routeQuestionType', 0, 'choice') as string)
+					: undefined,
+				routes: {
+					route: this.getNodeParameter('routes.route', 0, []) as Array<{ name?: string }>,
+				},
+				routeLevels: {
+					level: this.getNodeParameter('routeLevels.level', 0, []) as Array<{ level?: string }>,
+				},
+				confidenceHandling: this.getNodeParameter(
+					'confidenceHandling',
+					0,
+					'bestOption',
+				) as string,
+				routeTrueMeans: this.getNodeParameter('routeTrueMeans', 0, '') as string,
+				routeFalseMeans: this.getNodeParameter('routeFalseMeans', 0, '') as string,
+				trueThreshold: this.getNodeParameter('trueThreshold', 0, 0.5) as number,
+				falseThreshold: this.getNodeParameter('falseThreshold', 0, 0.5) as number,
+				fallbackMode: evaluateMode,
+			},
+			nodeVersion,
+		).length;
 		const outputs: INodeExecutionData[][] = Array.from(
 			{ length: Math.max(outputCount, 1) },
 			() => [],
@@ -410,6 +435,16 @@ export class Decisions implements INodeType {
 		const processItem = async (itemIndex: number, includeOtherFields: boolean): Promise<void> => {
 			const item = items[itemIndex];
 			const context: ItemContext = { node, itemIndex };
+
+			// Validate the threshold before the API call so a bad value fails
+			// fast without spending a request. Only paths using confidence read it.
+			const usesConfidence =
+				(!isRoute && evaluateMode !== 'disabled') ||
+				(isRoute &&
+					((!isNoul && !isScore) || (isNoul && isV2) || (isScore && isV2 && separateLowConfidence)));
+			const threshold = usesConfidence
+				? readConfidenceThreshold(this, context, routeDefaultThreshold)
+				: routeDefaultThreshold;
 
 			const response = await evaluateState(
 				this,
@@ -443,7 +478,6 @@ export class Decisions implements INodeType {
 					outputs[0].push(buildOutputItem(item, fields, includeOtherFields, itemIndex));
 					return;
 				}
-				const threshold = readConfidenceThreshold(this, context, 0.7);
 				const base: Record<string, IDataObject> = simplify
 					? (simplifyAnswers(answers) as Record<string, IDataObject>)
 					: Object.fromEntries(
@@ -452,10 +486,13 @@ export class Decisions implements INodeType {
 								{ ...(answer as unknown as IDataObject) },
 							]),
 						);
+				// Confidence is assessed on the raw API answers, before Simplify,
+				// so refusal detection never depends on the simplified shape.
 				const { answers: enriched, lowConfidenceQuestions } = enrichAnswers(
 					base,
 					fallbackMode,
 					threshold,
+					answers,
 				);
 				if (fallbackMode === 'bestGuess') {
 					const fields: IDataObject = simplify
@@ -506,11 +543,10 @@ export class Decisions implements INodeType {
 			const targetIndex = isNoul
 				? isV2
 					? resolveNoulRouteV2(
-							this,
 							context,
 							answer as NoulAnswer | PredicateAnswer | RefusalAnswer | undefined,
 							separateLowConfidence,
-							routeDefaultThreshold,
+							threshold,
 						)
 					: resolveNoulRoute(
 							this,
@@ -520,21 +556,19 @@ export class Decisions implements INodeType {
 						)
 				: isScore
 					? resolveScoreRoute(
-							this,
 							context,
 							answer as ScoreAnswer | RefusalAnswer | undefined,
 							levelCount,
 							isOpenAi,
 							isV2 && separateLowConfidence,
-							routeDefaultThreshold,
+							threshold,
 						)
 					: resolveChoiceRoute(
-							this,
 							context,
 							answer as ChoiceAnswer | RefusalAnswer | undefined,
 							routeNames,
 							separateLowConfidence,
-							routeDefaultThreshold,
+							threshold,
 						);
 			const fields: IDataObject = {
 				route: answerFields,

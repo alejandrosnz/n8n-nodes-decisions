@@ -62,7 +62,7 @@ export function buildCriteriaMap(
 	noun: string,
 	where: string,
 ): IDataObject {
-	const criteria: IDataObject = {};
+	const criteria: IDataObject = Object.create(null);
 	for (const entry of entries) {
 		const name = (entry.name ?? '').trim();
 		if (name === '') {
@@ -146,7 +146,7 @@ export function buildQuestionsFromEntries(
 	if (entries.length === 0) {
 		fail(context, "'Questions' is empty", 'Add at least one question');
 	}
-	const questions: IDataObject = {};
+	const questions: IDataObject = Object.create(null);
 	for (const entry of entries) {
 		const id = (entry.id ?? '').trim();
 		if (id === '') {
@@ -213,11 +213,14 @@ export function simplifyAnswers(answers: Record<string, Answer>): IDataObject {
 }
 
 /** Serialized method used in expression, must not use any externally defined variables.
+ * The editor evaluates it as `configuredOutputs($parameter, $nodeVersion)`.
  * Noul has two generations: v1 uses the true/false probability thresholds (an
  * `Uncertain` output when they leave a gap); v2 reuses `confidenceHandling`
  * like Choice/Score (a `Low Confidence` output when set to `separateOutput`).
- * The v2 path wins when `separateOutput` is set, so old workflows without that
- * parameter keep their v1 outputs. */
+ * Branching on the node version keeps editor and runtime in agreement even
+ * with stale parameters (a v2 node copied from v1 still carries thresholds;
+ * a v1 node may carry a `confidenceHandling` residue). Without a version it
+ * falls back to v1 behaviour. */
 export const configuredOutputs = (
 	parameters: {
 		operation?: string;
@@ -231,7 +234,9 @@ export const configuredOutputs = (
 		falseThreshold?: number;
 		fallbackMode?: string;
 	} = {},
+	nodeVersion?: number,
 ) => {
+	const isV2 = (nodeVersion ?? 1) >= 2;
 	if (parameters.operation !== 'route') {
 		if (parameters.fallbackMode === 'lowConfidenceOutput') {
 			return [
@@ -246,8 +251,10 @@ export const configuredOutputs = (
 			{ type: 'main', displayName: (parameters.routeTrueMeans ?? '').trim() || 'True' },
 			{ type: 'main', displayName: (parameters.routeFalseMeans ?? '').trim() || 'False' },
 		];
-		if (parameters.confidenceHandling === 'separateOutput') {
-			outputs.push({ type: 'main', displayName: 'Low Confidence' });
+		if (isV2) {
+			if (parameters.confidenceHandling === 'separateOutput') {
+				outputs.push({ type: 'main', displayName: 'Low Confidence' });
+			}
 			return outputs;
 		}
 		const trueThreshold = parameters.trueThreshold ?? 0.5;
@@ -267,7 +274,7 @@ export const configuredOutputs = (
 			type: 'main',
 			displayName: (level ?? '').trim() || `Level ${index}`,
 		}));
-		if (parameters.confidenceHandling === 'separateOutput') {
+		if (isV2 && parameters.confidenceHandling === 'separateOutput') {
 			outputs.push({ type: 'main', displayName: 'Low Confidence' });
 		}
 		return outputs;
@@ -281,7 +288,7 @@ export const configuredOutputs = (
 		return [{ type: 'main' }];
 	}
 	if (parameters.confidenceHandling === 'separateOutput') {
-		outputs.push({ type: 'main', displayName: 'Fallback' });
+		outputs.push({ type: 'main', displayName: isV2 ? 'Low Confidence' : 'Fallback' });
 	}
 	return outputs;
 };

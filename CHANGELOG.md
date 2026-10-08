@@ -10,6 +10,10 @@ package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Unified confidence (node version 2, breaking for Route Noul).** Route Noul no longer uses **True/False Probability Thresholds** or an `Uncertain` output. All three question types share one **Confidence Handling** / **Confidence Threshold** (default `0.7`): Yes/No confidence is `|p − 0.5| × 2`, so `confidence ≥ c` is exactly `p ≥ 0.5 + c/2` (true) or `p ≤ 0.5 − c/2` (false). An unsure item goes to a `Low Confidence` output when enabled, otherwise Noul follows `p > 0.5`. Score also gains an optional `Low Confidence` output. Workflows saved with node version 1 keep running with the old thresholds. Asymmetric v1 threshold gaps cannot be expressed as a single confidence threshold.
 - Evaluate failures with **Low Confidence Output** now go to the `Low Confidence` output instead of the main output.
+- Route **Confidence Threshold** now defaults to `0.7` everywhere (was `0.5` for Choice routes).
+- The Choice extra output is named `Low Confidence` in node version 2 (was `Fallback`).
+- A Route answer without confidence is now treated as reliable, like in Evaluate, instead of going to the low-confidence output.
+- **Fallback Mode** can no longer be set by expression, since it decides the number of outputs.
 - **Confidence Threshold** values outside 0–1, or not a finite number, are now errors instead of silently disabling the filter. **Fallback Mode** must resolve to the same value for every item in a run.
 - A refusal now counts as low confidence (`confidence: 0`, no `value`) instead of being treated as reliable.
 

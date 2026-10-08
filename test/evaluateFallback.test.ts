@@ -2,6 +2,7 @@ import type { IExecuteFunctions, INode, INodeExecutionData } from 'n8n-workflow'
 import { describe, expect, it, vi } from 'vitest';
 
 import { Decisions } from '../nodes/Decisions/Decisions.node';
+import { decisionsProperties } from '../nodes/Decisions/descriptions';
 import { configuredOutputs } from '../nodes/Decisions/helpers';
 
 const node: INode = {
@@ -83,14 +84,14 @@ describe('Evaluate fallbackMode outputs', () => {
 		]);
 	});
 
-	it('passes the whole $parameter (including fallbackMode) to the outputs expression', () => {
-		// The node description builds its outputs as `={{ (${configuredOutputs})($parameter) }}`.
-		// Evaluating that template with the real $parameter is what n8n does, so the
-		// wiring holds as long as the expression forwards $parameter untouched and the
-		// function behind it honors fallbackMode (covered above and below).
+	it('embeds the current configuredOutputs and forwards $parameter and $nodeVersion', () => {
+		// The node description builds its outputs as an expression n8n evaluates
+		// per node. The wiring holds when the expression embeds this exact
+		// function and forwards both the parameters and the node version, so a
+		// stale parameter from another version cannot pick the wrong outputs.
 		const outputsExpression = new Decisions().description.outputs as string;
-		expect(outputsExpression).toContain('($parameter)');
-		expect(outputsExpression).toContain('fallbackMode');
+		expect(outputsExpression).toContain(configuredOutputs.toString());
+		expect(outputsExpression).toContain('($parameter, $nodeVersion)');
 		expect(
 			configuredOutputs({ operation: 'evaluate', fallbackMode: 'lowConfidenceOutput' }),
 		).toEqual([
@@ -98,16 +99,29 @@ describe('Evaluate fallbackMode outputs', () => {
 			{ type: 'main', displayName: 'Low Confidence' },
 		]);
 		expect(
-			configuredOutputs({
-				operation: 'route',
-				routeQuestionType: 'noul',
-				confidenceHandling: 'separateOutput',
-			}),
+			configuredOutputs(
+				{
+					operation: 'route',
+					routeQuestionType: 'noul',
+					confidenceHandling: 'separateOutput',
+				},
+				2,
+			),
 		).toEqual([
 			{ type: 'main', displayName: 'True' },
 			{ type: 'main', displayName: 'False' },
 			{ type: 'main', displayName: 'Low Confidence' },
 		]);
+	});
+
+	it('defaults every Confidence Threshold to 0.7', () => {
+		const thresholds = decisionsProperties.filter(
+			(property) => property.name === 'confidenceThreshold',
+		);
+		expect(thresholds.length).toBeGreaterThan(0);
+		for (const property of thresholds) {
+			expect(property.default).toBe(0.7);
+		}
 	});
 });
 
@@ -311,15 +325,16 @@ describe('Evaluate fallback execution', () => {
 	});
 
 	it.each([[Number.NaN], [-1], [2], ['high']])(
-		'rejects a Confidence Threshold of %s',
+		'rejects a Confidence Threshold of %s before calling the API',
 		async (threshold) => {
-			const { functions } = createFunctions(
+			const { functions, request } = createFunctions(
 				{ ...baseEvaluate, fallbackMode: 'bestGuess', confidenceThreshold: threshold },
 				noulAnswer(0.9),
 			);
 			await expect(Decisions.prototype.execute.call(functions)).rejects.toThrow(
 				/'Confidence Threshold'/,
 			);
+			expect(request).not.toHaveBeenCalled();
 		},
 	);
 
@@ -366,6 +381,40 @@ describe('Evaluate fallback execution', () => {
 		const outputs = await Decisions.prototype.execute.call(functions);
 		expect(outputs).toEqual([[], []]);
 		expect(request).not.toHaveBeenCalled();
+	});
+
+	it('keeps __proto__ and constructor question IDs end to end', async () => {
+		const parameters = {
+			...baseEvaluate,
+			'questions.question': [
+				{ id: '__proto__', instructions: 'Urgent?', type: 'noul' },
+				{ id: 'constructor', instructions: 'Which team?', type: 'noul' },
+			],
+			fallbackMode: 'bestGuess',
+			confidenceThreshold: 0.7,
+		};
+		const respond = () => ({
+			statusCode: 200,
+			body: {
+				model: 'jev-1.13.0',
+				// Parsed, so __proto__ stays an own key instead of setting the prototype
+				answers: JSON.parse(
+					'{"__proto__": {"type": "noul", "noul": 0.9}, "constructor": {"type": "noul", "noul": 0.1}}',
+				),
+				usage: { input_tokens: 1, output_tokens: 1 },
+			},
+		});
+		const { functions, request } = createFunctions(parameters, respond);
+		const outputs = await Decisions.prototype.execute.call(functions);
+		const body = (
+			request.mock.calls[0] as unknown as [unknown, { body: Record<string, unknown> }]
+		)[1].body;
+		const questions = body.questions as Record<string, unknown>;
+		expect(Object.keys(questions)).toEqual(['__proto__', 'constructor']);
+		const answers = (outputs[0][0].json as Record<string, Record<string, unknown>>).answers;
+		expect(Object.keys(answers)).toEqual(['__proto__', 'constructor']);
+		expect(answers['__proto__']).toMatchObject({ noul: 0.9, value: true });
+		expect(answers.constructor).toMatchObject({ noul: 0.1, value: false });
 	});
 });
 
