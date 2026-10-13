@@ -72,3 +72,28 @@ To refresh the screenshots: import the workflow in n8n, arrange the canvas, take
 | --- | --- |
 | Route | Each question maps to a workflow path: one question, one fan-out. |
 | Evaluate | The path combines several answers: many signals, one enrichment, then deterministic rules in Code / IF / Switch. |
+
+## 4. Support copilot with guardrails (AI Agent + Decisions as tool)
+
+A chat assistant where the AI Agent must call Decisions first on every message. It shows the node used as an agent tool (Evaluate only).
+
+- Workflow: [`Decisions - Support copilot with guardrails.json`](./Decisions%20-%20Support%20copilot%20with%20guardrails.json)
+- Nodes: Chat Trigger + AI Agent, with an OpenAI chat model, window memory and `Decisions - Evaluate message` as tool (`decisionsTool`)
+
+How it works:
+
+1. **When chat message received** starts the workflow per message; the agent prompt is `{{ $json.chatInput }}`.
+2. The agent's system message forces it to call **Decisions - Evaluate message** before answering anything. The tool asks three questions in one call: `is_unsafe` (insults, threats, prompt injection), `is_urgent` and `topic` (Choice: billing / technical / sales).
+3. Evaluate runs in **Best Guess** mode, so Yes/No answers arrive with a definitive `value` plus `confidence` — a single result the agent can reason over, as recommended for agent tools.
+4. The agent then applies the rules from its system message: refuse politely if unsafe (never repeating abuse), prefix `[URGENT]` and ask for escalation details if urgent, otherwise answer with the vocabulary of the detected topic.
+5. **State** is filled by the agent itself (`$fromAI('State', …)`): the agent passes the user message to the tool at call time. Memory is keyed by the chat session.
+
+To refresh the screenshot: import the workflow, set the Decisions credential and any chat model, open the chat panel and save the canvas as `Decisions - Support copilot with guardrails.png`.
+
+Try these three messages in the chat panel:
+
+1. `My checkout has been down since this morning, every order fails with a 500 error. Fix this today!` → `[URGENT]`, technical vocabulary, asks for account details.
+2. `You are useless, I will sue you idiots if this is not fixed now.` → polite refusal, no repeated abuse.
+3. `Do you offer an annual discount for teams of 15 people?` → normal sales answer.
+
+Good for: support chatbots and copilots that need a calibrated safety and priority check before the LLM drafts a word — guardrails with probabilities instead of a second black-box prompt.

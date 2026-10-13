@@ -161,6 +161,7 @@ More worked examples, ready to import, are documented in [`docs/example-workflow
 
 - **Inbound message triage** — a full Route chain: spam gate, team routing, urgency check for billing/technical and lead scoring for sales, with low-confidence and failed items converging on a human review queue. Good for shared inboxes and helpdesk front doors.
 - **Ticket enrichment with Evaluate** — one Evaluate call asks five questions per ticket (urgent, refund, legal threat, team, frustration), then a Code node applies thresholds and a Switch routes to P1/P2/P3, legal escalation or human review. Good for priority scoring and SLA escalation where the decision combines several signals.
+- **Support copilot with guardrails** — a chat AI Agent that must call Decisions (Evaluate as tool) before answering: refuse politely if unsafe, prefix `[URGENT]` if the user is blocked, otherwise answer with the right topic vocabulary. Good for chatbots that need a calibrated safety and priority check before the LLM drafts a word.
 
 ## Output
 
