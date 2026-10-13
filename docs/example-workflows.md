@@ -80,6 +80,8 @@ A chat assistant where the AI Agent must call Decisions first on every message. 
 - Workflow: [`Decisions - Support copilot with guardrails.json`](./Decisions%20-%20Support%20copilot%20with%20guardrails.json)
 - Nodes: Chat Trigger + AI Agent, with an OpenAI chat model, window memory and `Decisions - Evaluate message` as tool (`decisionsTool`)
 
+![Support copilot workflow: a chat trigger feeds an AI Agent wired to a chat model, window memory and Decisions as a guardrail tool](./Decisions%20-%20Support%20copilot%20with%20guardrails.png)
+
 How it works:
 
 1. **When chat message received** starts the workflow per message; the agent prompt is `{{ $json.chatInput }}`.
