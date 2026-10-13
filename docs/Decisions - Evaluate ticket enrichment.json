@@ -1,0 +1,502 @@
+{
+  "name": "Decisions - Evaluate ticket enrichment",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        560
+      ],
+      "id": "44a7028e-93bd-46b3-8130-212cc617a82a",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Six support tickets covering every branch. In production, replace with a Webhook / helpdesk trigger.\nconst tickets = [\n  { id: 'T-101', from: 'ana@pixelforge.io', subject: 'Double charge, last warning',\n    body: \"This is the third time you have double-charged me. If this isn't refunded by Friday I'm contacting my lawyer and filing a chargeback.\" },\n  { id: 'T-102', from: 'ops@brightcart.com', subject: 'Webhooks failing with 504',\n    body: 'Our webhook deliveries have been failing since 9am with 504 errors. We process orders through it, so we need this looked at ASAP.' },\n  { id: 'T-103', from: 'sam@greenleaf.co', subject: 'Export still broken',\n    body: \"The export feature has been broken for a week and I'm honestly getting annoyed. I'd like a refund for this month.\" },\n  { id: 'T-104', from: 'finance@oakridge.org', subject: 'Invoice email address',\n    body: 'Is it possible to change the email address our invoices are sent to? No rush at all.' },\n  { id: 'T-105', from: 'lena@studio-nine.dev', subject: 'Annual discount?',\n    body: 'Do you offer an annual discount for teams of 15 people?' },\n  { id: 'T-106', from: 'mark@unknown-co.com', subject: 'Re: Re: issue',\n    body: 'Same issue as before.' },\n];\nreturn tickets.map(t => ({ json: t }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        560
+      ],
+      "id": "b745e4f5-a19f-459d-a95b-9b1802d7d0cc",
+      "name": "Sample support tickets"
+    },
+    {
+      "parameters": {
+        "model": "typesafe/jev-1.13",
+        "stateText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
+        "questions": {
+          "question": [
+            {
+              "id": "is_urgent",
+              "instructions": "Is the customer blocked right now, with a problem that needs attention today?",
+              "trueMeans": "urgent",
+              "falseMeans": "not_urgent"
+            },
+            {
+              "id": "wants_refund",
+              "instructions": "Is the customer asking for a refund or a credit?",
+              "trueMeans": "refund",
+              "falseMeans": "no_refund"
+            },
+            {
+              "id": "legal_threat",
+              "instructions": "Does the customer threaten legal action, a chargeback or a public complaint?",
+              "trueMeans": "threat",
+              "falseMeans": "no_threat"
+            },
+            {
+              "type": "choice",
+              "id": "team",
+              "instructions": "Which team should handle this message?",
+              "choiceOptions": {
+                "option": [
+                  {
+                    "name": "billing",
+                    "description": "Payments, payouts, invoices, refunds"
+                  },
+                  {
+                    "name": "technical",
+                    "description": "Bugs, outages, integrations, API errors"
+                  },
+                  {
+                    "name": "sales",
+                    "description": "Pricing, discounts, upgrades, new accounts"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "score",
+              "id": "frustration",
+              "instructions": "How frustrated is the customer?",
+              "scoreLevels": {
+                "level": [
+                  {
+                    "level": "Calm or neutral"
+                  },
+                  {
+                    "level": "Mildly annoyed"
+                  },
+                  {
+                    "level": "Clearly frustrated"
+                  },
+                  {
+                    "level": "Furious"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        464,
+        560
+      ],
+      "id": "c69bd37d-408f-4ac6-98ab-13af41da359c",
+      "name": "Decisions - Evaluate ticket",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Business rules live in code: the Evaluate node only reports signals + probabilities.\n// Tune these thresholds to your own tolerance.\nconst T = { urgent: 0.8, refund: 0.7, legal: 0.7, frustrated: 2, minConfidence: 0.6 };\n\nreturn $input.all().map(({ json }) => {\n  const a = json.answers || {};\n  const urgent     = a.is_urgent?.noul ?? 0;\n  const refund     = a.wants_refund?.noul ?? 0;\n  const legal      = a.legal_threat?.noul ?? 0;\n  const frustration = a.frustration?.score ?? 0;\n  const team       = a.team?.choice ?? 'unknown';\n  const lowConfidence = (a.team?.confidence ?? 0) < T.minConfidence\n                     || (a.frustration?.confidence ?? 0) < T.minConfidence;\n\n  const signals = [];\n  if (urgent >= T.urgent) signals.push('urgent');\n  if (frustration >= T.frustrated) signals.push('frustrated');\n  if (refund >= T.refund) signals.push('refund_request');\n  if (legal >= T.legal) signals.push('legal_threat');\n\n  let route = 'p3';\n  if (urgent >= T.urgent || frustration >= T.frustrated) route = 'p2';\n  if (urgent >= T.urgent && frustration >= T.frustrated) route = 'p1';\n  if (legal >= T.legal) route = 'legal';\n  else if (lowConfidence) route = 'review';\n\n  return { json: { ...json, team, signals, route, reason: route === 'review' ? 'low_confidence' : undefined } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        464
+      ],
+      "id": "383c8b42-d8b1-4eb3-a8fd-e957cf0135d0",
+      "name": "Apply business rules"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "975f9b3d-a565-4337-b02a-b191a68cb01a",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "legal",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Legal escalation"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "81aaf4b5-0681-4bf5-b6fd-62f6e622032e",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "review",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Human review"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c7ca2e75-3dde-4247-b42c-64b0f383fabf",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "p1",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "P1"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "161e0439-1daa-41b8-b510-38a95806e062",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "p2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "P2"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6741eaac-bc15-4d92-8087-121174f176f2",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "p3",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "P3"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1024,
+        464
+      ],
+      "id": "b46e9f58-76f0-4877-b47a-f31d8c14d825",
+      "name": "Switch on route"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        240
+      ],
+      "id": "53bd87c7-404a-43f2-a518-24a1ecc14369",
+      "name": "Escalate to manager",
+      "notesInFlow": true,
+      "notes": "Replace with Slack / email to account manager"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        560
+      ],
+      "id": "b4d6ac9b-d125-45d0-bfff-11870e4c91cf",
+      "name": "Human review queue",
+      "notesInFlow": true,
+      "notes": "Replace with Slack / Airtable / helpdesk inbox"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        400
+      ],
+      "id": "82beb6e8-7d51-4e63-9e54-1a4f395672dc",
+      "name": "Page on-call (P1)",
+      "notesInFlow": true,
+      "notes": "Replace with PagerDuty / Opsgenie"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        720
+      ],
+      "id": "6f513c29-ceb4-4c72-8bdd-f89fc9dbd9ba",
+      "name": "Create P2 ticket",
+      "notesInFlow": true,
+      "notes": "Replace with Zendesk / Jira / Linear"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        864
+      ],
+      "id": "50e6bce1-b217-4433-8c70-e7aeb02861b3",
+      "name": "Create P3 ticket",
+      "notesInFlow": true,
+      "notes": "Replace with Zendesk / Jira / Linear"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4e780a35-dcd8-4dcc-8b7c-055ff4fab31d",
+              "name": "reason",
+              "value": "api_error",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        768,
+        784
+      ],
+      "id": "fc33d8ec-9b30-4b3c-b3b4-783136343f78",
+      "name": "Reason - API error"
+    },
+    {
+      "parameters": {
+        "content": "## Ticket enrichment with Evaluate\nOne **Evaluate** call asks five questions about the same ticket at once:\n- `is_urgent`, `wants_refund`, `legal_threat` (Noul → probability)\n- `team` (Choice → option + confidence)\n- `frustration` (Score → position on 4 levels + confidence)\n\nThe answers land in `answers.<id>`. A Code node then applies the business rules, and a Switch routes the ticket.",
+        "height": 196,
+        "width": 700,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        320
+      ],
+      "id": "412bc2d2-6c1d-4ceb-bf4c-bdcf9b26f84c",
+      "name": "Sticky Note eb19"
+    },
+    {
+      "parameters": {
+        "content": "### Why Evaluate instead of several Route nodes?\nRoute picks a path *per question*. Evaluate returns every signal together, so rules can combine them (e.g. urgent **and** frustrated → P1) and thresholds stay in one place.",
+        "height": 102,
+        "width": 416,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        704,
+        336
+      ],
+      "id": "b664436b-1211-4cfa-ae51-e617e55a6f29",
+      "name": "Sticky Note 1809"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Sample support tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample support tickets": {
+      "main": [
+        [
+          {
+            "node": "Decisions - Evaluate ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decisions - Evaluate ticket": {
+      "main": [
+        [
+          {
+            "node": "Apply business rules",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reason - API error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply business rules": {
+      "main": [
+        [
+          {
+            "node": "Switch on route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch on route": {
+      "main": [
+        [
+          {
+            "node": "Escalate to manager",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Human review queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Page on-call (P1)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create P2 ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create P3 ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reason - API error": {
+      "main": [
+        [
+          {
+            "node": "Human review queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e4c6f180-d736-40d9-9578-fa2a90c8d555",
+  "meta": {
+    "instanceId": "ad60bc00ef372218dfa03c55129b4359826a8a6d6771e92e9468ffc9009f87f8"
+  },
+  "nodeGroups": [],
+  "id": "YQwihCr3QQU3ByGe",
+  "tags": []
+}

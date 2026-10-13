@@ -1,0 +1,573 @@
+{
+  "name": "Decisions - Inbound message triage",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        464
+      ],
+      "id": "43573577-1845-42ea-b028-2ba049e9131d",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n // Seven inbound messages covering every branch of the workflow.\n // In production, replace this node with a Webhook, IMAP or helpdesk trigger.\n\nconst messages = [\n  {\n    id: 1,\n    from: 'laura@atelier-lume.com',\n    subject: 'Payout failed again',\n    body: 'My payout has failed three days in a row and support chat keeps timing out. I need this fixed today.',\n  },\n  {\n    id: 2,\n    from: 'devops@northwind-labs.io',\n    subject: 'API returning 500s',\n    body: \"Since this morning's release our integration gets 500 errors on every call to /v2/orders. Our checkout is down and customers can't pay.\",\n  },\n  {\n    id: 3,\n    from: 'procurement@helixsoft.com',\n    subject: 'Pricing for 40 seats',\n    body: 'Hi, we trialed your product last month across two teams and the engineers want to standardize on it. Our current contract with the incumbent ends on the 30th. Can you send enterprise pricing for 40 seats and let me know if you can do a security review call this week?',\n  },\n  {\n    id: 4,\n    from: 'no-reply@seo-boost-now.biz',\n    subject: 'RANK #1 ON GOOGLE in 7 days!!!',\n    body: \"Congratulations! You've been selected for our exclusive SEO package. Reply within 24h to claim 90% off. Unsubscribe here.\",\n  },\n  {\n    id: 5,\n    from: 'tom.reyes@gmail.com',\n    subject: 'What does your product do?',\n    body: 'Hi, someone mentioned you in a Slack group. Just curious what it does, nothing planned for now.',\n  },\n  {\n    id: 6,\n    from: 'chris@brightpath.org',\n    subject: 'Re: Re: follow up',\n    body: 'Hey, it is me again. Same thing as last time, can you take a look when you have a chance? Thanks.',\n  },\n  {\n    id: 7,\n    from: 'accounts@kestrel-studio.com',\n    subject: 'Invoice copy',\n    body: 'Could you send me a PDF copy of invoice INV-2024-118? Our accountant needs it for the quarterly close, no rush.',\n  },\n];\n\n// Return one n8n item per message.\nreturn messages.map((message) => ({\n  json: message,\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        464
+      ],
+      "id": "ed95adf8-6e9d-48ba-81f0-8c1942ed1c94",
+      "name": "Sample inbound messages"
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "perplexity/pplx-decider-v1.1-27b",
+        "stateText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
+        "routeQuestionType": "noul",
+        "routeInstructions": "Is this message spam, an unsolicited promotion or an automated notification, rather than a real person with a genuine request?",
+        "routeTrueMeans": "spam",
+        "routeFalseMeans": "legit",
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        464,
+        448
+      ],
+      "id": "e7fa44ee-2898-4414-b5ff-ea9e25690598",
+      "name": "Decisions - Is spam",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        768,
+        272
+      ],
+      "id": "bef37cb9-8c15-48cf-a86f-de785638ffd0",
+      "name": "Discard spam"
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "perplexity/pplx-decider-v1.1-27b",
+        "stateText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
+        "routeInstructions": "Which team should handle this message?",
+        "routes": {
+          "route": [
+            {
+              "name": "billing",
+              "description": "Payments, payouts, invoices, refunds"
+            },
+            {
+              "name": "technical",
+              "description": "Bugs, outages, integrations, API errors"
+            },
+            {
+              "name": "sales",
+              "description": "Pricing, upgrades, new accounts"
+            }
+          ]
+        },
+        "confidenceHandling": "separateOutput",
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        768,
+        416
+      ],
+      "id": "2873497f-c5d3-4c73-b347-1712174df467",
+      "name": "Decisions - Route to team",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d82312b1-a02c-49a1-8752-fc76c85b58f1",
+              "name": "team",
+              "value": "={{ $json.route.choice }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1072,
+        400
+      ],
+      "id": "7bf958a1-51b8-4e9a-9631-1da5aaf3a713",
+      "name": "Save team"
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "perplexity/pplx-decider-v1.1-27b",
+        "stateText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
+        "routeQuestionType": "noul",
+        "routeInstructions": "Is the customer blocked right now, with a problem that needs attention today?",
+        "routeTrueMeans": "urgent",
+        "routeFalseMeans": "normal",
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        384
+      ],
+      "id": "3b14fd37-1e9f-4498-b664-32868ad1c98e",
+      "name": "Decisions - Is urgent",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1584,
+        288
+      ],
+      "id": "71e3072d-ecae-403d-bd93-2e2e12a17850",
+      "name": "Create P1 ticket",
+      "notesInFlow": true,
+      "notes": "Replace with Zendesk / Jira / Linear"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1584,
+        480
+      ],
+      "id": "f72df4a7-9503-4076-9164-ab399bba1c96",
+      "name": "Create standard ticket",
+      "notesInFlow": true,
+      "notes": "Replace with Zendesk / Jira / Linear"
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "perplexity/pplx-decider-v1.1-27b",
+        "stateText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
+        "routeQuestionType": "score",
+        "routeInstructions": "How ready is this lead to buy?",
+        "routeLevels": {
+          "level": [
+            {
+              "level": "Just browsing, no stated need or timeline"
+            },
+            {
+              "level": "Evaluating, comparing options without a deadline"
+            },
+            {
+              "level": "Ready to buy, has budget and a clear need"
+            },
+            {
+              "level": "Urgent, has a hard deadline and is asking to transact"
+            }
+          ]
+        },
+        "confidenceHandling": "separateOutput",
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        752
+      ],
+      "id": "4d0257af-d741-41da-9a56-6ccad0b34d8d",
+      "name": "Decisions - Lead readiness",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        624
+      ],
+      "id": "9c1d6d63-5e5f-413b-a52b-00831b046440",
+      "name": "Add to newsletter"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        752
+      ],
+      "id": "6aea0e06-ee3c-485e-af7b-e00c102f3fd8",
+      "name": "Start nurture sequence"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        880
+      ],
+      "id": "e841261f-4e7f-4a88-807b-dbc55ea51c07",
+      "name": "Assign to sales rep",
+      "notesInFlow": true,
+      "notes": "Replace with HubSpot / Salesforce"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        1024
+      ],
+      "id": "40200d89-3ece-4cf1-b9d6-73c9ac5e1124",
+      "name": "Alert sales rep now",
+      "notesInFlow": true,
+      "notes": "Replace with Slack / SMS"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "75bf6730-dfa4-4335-a2c5-3ebadcbbd7ef",
+              "name": "reason",
+              "value": "low_confidence",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1088,
+        1280
+      ],
+      "id": "83880eb5-c816-4562-a212-28259c3bdbc2",
+      "name": "Reason - low confidence"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fc270e58-7ee5-4f27-88df-03348cbbd7dd",
+              "name": "reason",
+              "value": "api_error",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1088,
+        1424
+      ],
+      "id": "ffa21258-8515-4415-801f-767f7a64bc16",
+      "name": "Reason - API error"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        1344
+      ],
+      "id": "9bf23fbe-f0aa-42ca-87d2-ab6130876f87",
+      "name": "Human review queue",
+      "notesInFlow": true,
+      "notes": "Replace with Slack / Airtable / helpdesk inbox"
+    },
+    {
+      "parameters": {
+        "content": "## Inbound message triage\nChained decisions on every incoming message:\n1. **Spam gate** (Noul) \n2. **Team routing** (Choice + Fallback)\n3. **Urgency** (Noul) for billing / technical, or **lead readiness** (Score) for sales\n\nAnything the model is unsure about (Fallback) or any failed call (error output) ends up in the human review queue. Destination nodes are NoOp placeholders: swap them for your real tools.",
+        "height": 260,
+        "width": 720,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        176
+      ],
+      "id": "4d02d893-f4c3-4a6c-8016-7aabc162c4ed",
+      "name": "Sticky Note 3d8f"
+    },
+    {
+      "parameters": {
+        "content": "## Human review\nFallback outputs (confidence below the threshold) and error outputs converge here, tagged with a `reason`.",
+        "height": 384,
+        "width": 620,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        1184
+      ],
+      "id": "0b656d8c-31bd-4596-8e0d-03602608671c",
+      "name": "Sticky Note 268e"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Sample inbound messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample inbound messages": {
+      "main": [
+        [
+          {
+            "node": "Decisions - Is spam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decisions - Is spam": {
+      "main": [
+        [
+          {
+            "node": "Discard spam",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Decisions - Route to team",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reason - API error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decisions - Route to team": {
+      "main": [
+        [
+          {
+            "node": "Save team",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save team",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Decisions - Lead readiness",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reason - low confidence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reason - API error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save team": {
+      "main": [
+        [
+          {
+            "node": "Decisions - Is urgent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decisions - Is urgent": {
+      "main": [
+        [
+          {
+            "node": "Create P1 ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create standard ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reason - API error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decisions - Lead readiness": {
+      "main": [
+        [
+          {
+            "node": "Add to newsletter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start nurture sequence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Assign to sales rep",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert sales rep now",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reason - low confidence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reason - API error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reason - low confidence": {
+      "main": [
+        [
+          {
+            "node": "Human review queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reason - API error": {
+      "main": [
+        [
+          {
+            "node": "Human review queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5ce08bf9-6a4d-4614-b34c-ffd44198a683",
+  "meta": {
+    "instanceId": "ad60bc00ef372218dfa03c55129b4359826a8a6d6771e92e9468ffc9009f87f8"
+  },
+  "nodeGroups": [],
+  "id": "TWokjFirqsD2TO3T",
+  "tags": []
+}
