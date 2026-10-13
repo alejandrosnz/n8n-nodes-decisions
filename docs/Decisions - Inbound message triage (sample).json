@@ -1,0 +1,240 @@
+{
+  "name": "Decisions - Inbound message triage (sample)",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        16,
+        224
+      ],
+      "id": "cf8dfc99-bd89-431b-ade8-634f667f7d77",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Four inbound messages covering every branch of the sample.\n// In production, replace this node with a Webhook, IMAP or helpdesk trigger.\n\nconst messages = [\n  {\n    id: 1,\n    from: 'laura@atelier-lume.com',\n    subject: 'Payout failed again',\n    body: 'My payout has failed three days in a row and support chat keeps timing out. I need this fixed today.',\n  },\n  {\n    id: 2,\n    from: 'devops@northwind-labs.io',\n    subject: 'API returning 500s',\n    body: \"Since this morning's release our integration gets 500 errors on every call to /v2/orders. Our checkout is down and customers can't pay.\",\n  },\n  {\n    id: 3,\n    from: 'procurement@helixsoft.com',\n    subject: 'Pricing for 40 seats',\n    body: 'Hi, we trialed your product last month across two teams. Can you send enterprise pricing for 40 seats and let me know if you can do a security review call this week?',\n  },\n  {\n    id: 4,\n    from: 'no-reply@seo-boost-now.biz',\n    subject: 'RANK #1 ON GOOGLE in 7 days!!!',\n    body: \"Congratulations! You've been selected for our exclusive SEO package. Reply within 24h to claim 90% off. Unsubscribe here.\",\n  },\n];\n\n// Return one n8n item per message.\nreturn messages.map((message) => ({\n  json: message,\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        224
+      ],
+      "id": "2630b95c-9e21-430d-8a76-b5f86666ff07",
+      "name": "Sample inbound messages"
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "perplexity/pplx-decider-v1.1-27b",
+        "stateText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
+        "routeQuestionType": "noul",
+        "routeInstructions": "Is this message spam, an unsolicited promotion or an automated notification, rather than a real person with a genuine request?",
+        "routeTrueMeans": "spam",
+        "routeFalseMeans": "legit",
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        464,
+        224
+      ],
+      "id": "47c227a1-c0c8-4969-925d-e29577b14a4c",
+      "name": "Decisions - Is spam",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        688,
+        128
+      ],
+      "id": "64bc2018-a507-43da-9b9c-de15ce90c49b",
+      "name": "Discard spam"
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "perplexity/pplx-decider-v1.1-27b",
+        "stateText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
+        "routeInstructions": "Which team should handle this message?",
+        "routes": {
+          "route": [
+            {
+              "name": "billing",
+              "description": "Payments, payouts, invoices, refunds"
+            },
+            {
+              "name": "technical",
+              "description": "Bugs, outages, integrations, API errors"
+            },
+            {
+              "name": "sales",
+              "description": "Pricing, upgrades, new accounts"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        688,
+        320
+      ],
+      "id": "166fd2a0-c18a-4939-aaa3-48920a31ddba",
+      "name": "Decisions - Route to team",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        912,
+        144
+      ],
+      "id": "4c25a364-4b79-485a-9688-1d60743eb7e1",
+      "name": "Billing queue",
+      "notesInFlow": true,
+      "notes": "Replace with Zendesk / Jira / Linear"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        912,
+        336
+      ],
+      "id": "692314cd-3f9f-46a9-9f67-e2653f594a41",
+      "name": "Technical queue",
+      "notesInFlow": true,
+      "notes": "Replace with Zendesk / Jira / Linear"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        912,
+        528
+      ],
+      "id": "71ab206f-456e-4d31-9b2e-200a02d7db52",
+      "name": "Sales queue",
+      "notesInFlow": true,
+      "notes": "Replace with HubSpot / Salesforce"
+    },
+    {
+      "parameters": {
+        "content": "## Inbound triage (sample)\n1. **Is spam** (Noul): spam goes to `Discard spam`, everything else continues.\n2. **Route to team** (Choice): `billing`, `technical` or `sales`.",
+        "height": 124,
+        "width": 480,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        64
+      ],
+      "id": "6f937717-a187-411a-b1ba-f1600d624341",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Sample inbound messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample inbound messages": {
+      "main": [
+        [
+          {
+            "node": "Decisions - Is spam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decisions - Is spam": {
+      "main": [
+        [
+          {
+            "node": "Discard spam",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Decisions - Route to team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decisions - Route to team": {
+      "main": [
+        [
+          {
+            "node": "Billing queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Technical queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sales queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5fd5aa24-87ca-4115-aa73-ea78d7895d87",
+  "meta": {
+    "instanceId": "ad60bc00ef372218dfa03c55129b4359826a8a6d6771e92e9468ffc9009f87f8"
+  },
+  "nodeGroups": [],
+  "id": "7XJPK0vLuWd3hGZi",
+  "tags": []
+}

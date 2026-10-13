@@ -151,9 +151,17 @@ The `route` field holds the answer in the same form Evaluate uses, and the outpu
 
 ## Example workflow
 
-This workflow triages support tickets. A webhook receives each ticket, and the Decisions node's Route operation asks a Choice question with three routes: `billing`, `tech support` and `sales`. Each route's output leads to that team. **Confidence Handling** is set to **Route to Separate Fallback Output**, so a ticket answered below **Confidence Threshold** leaves from `Fallback` instead. A Switch node then sends it on by its confidence, either to be flagged for review or to a human queue.
+This workflow triages inbound messages. A spam gate (Noul) drops promotions and bot mail, then a Choice question routes each real message to `billing`, `technical` or `sales`.
 
-![An n8n workflow in which a webhook receives a support ticket, the Decisions node routes it to the billing, tech support or sales team, and its Fallback output leads to a Switch node that sends the ticket for review or to a human queue](docs/images/example-workflow.png)
+![Inbound triage sample workflow: sample messages pass a spam gate, then route to the billing, technical or sales queue](docs/Decisions%20-%20Inbound%20message%20triage%20(sample).png)
+
+Import [`docs/Decisions - Inbound message triage (sample).json`](docs/Decisions%20-%20Inbound%20message%20triage%20(sample).json), pick your Decisions API credential and click Execute.
+
+More worked examples, ready to import, are documented in [`docs/example-workflows.md`](docs/example-workflows.md):
+
+- **Inbound message triage** — a full Route chain: spam gate, team routing, urgency check for billing/technical and lead scoring for sales, with low-confidence and failed items converging on a human review queue. Good for shared inboxes and helpdesk front doors.
+- **Ticket enrichment with Evaluate** — one Evaluate call asks five questions per ticket (urgent, refund, legal threat, team, frustration), then a Code node applies thresholds and a Switch routes to P1/P2/P3, legal escalation or human review. Good for priority scoring and SLA escalation where the decision combines several signals.
+- **Support copilot with guardrails** — a chat AI Agent that must call Decisions (Evaluate as tool) before answering: refuse politely if unsafe, prefix `[URGENT]` if the user is blocked, otherwise answer with the right topic vocabulary. Good for chatbots that need a calibrated safety and priority check before the LLM drafts a word.
 
 ## Output
 
