@@ -36,12 +36,16 @@ import {
 	simplifyAnswer,
 	simplifyAnswers,
 } from './helpers';
+import { buildImagePart } from './image';
 
-function buildState(
+/** The parts array Text + Image mode sends: one text part, one image part.
+ * OpenRouter and the System One format take it as `state`; openai.ts turns it
+ * into a one-message `input` for OpenAI. */
+async function buildState(
 	functions: IExecuteFunctions,
 	context: ItemContext,
 	item: INodeExecutionData,
-): unknown {
+): Promise<unknown> {
 	const { itemIndex } = context;
 	const format = functions.getNodeParameter('stateFormat', itemIndex) as string;
 	if (format === 'inputItem') {
@@ -60,16 +64,27 @@ function buildState(
 	}
 	const text = functions.getNodeParameter('stateText', itemIndex);
 	if (typeof text === 'object' && text !== null) {
+		// Text + Image sends a text part, so a structured value no longer
+		// travels as its own object
+		if (format === 'image') {
+			return [JSON.stringify(text), await buildImagePart(functions, context)];
+		}
 		return text;
 	}
-	// An expression can resolve to a number or boolean, which is sent as text
+	let textValue;
 	if (typeof text === 'number' || typeof text === 'boolean') {
-		return String(text);
+		// An expression can resolve to a number or boolean, which is sent as text
+		textValue = String(text);
+	} else {
+		if (typeof text !== 'string' || text.trim() === '') {
+			fail(context, "'State' is empty", 'Enter the content to evaluate');
+		}
+		textValue = text;
 	}
-	if (typeof text !== 'string' || text.trim() === '') {
-		fail(context, "'State' is empty", 'Enter the content to evaluate');
+	if (format === 'image') {
+		return [textValue, await buildImagePart(functions, context)];
 	}
-	return text;
+	return textValue;
 }
 
 function readModel(functions: IExecuteFunctions, context: ItemContext): string {
@@ -450,7 +465,7 @@ export class Decisions implements INodeType {
 				this,
 				itemIndex,
 				{
-					state: buildState(this, context, item),
+					state: await buildState(this, context, item),
 					model: readModel(this, context),
 					questions: buildQuestions(this, context, operation, isOpenAi),
 				} as IDataObject,

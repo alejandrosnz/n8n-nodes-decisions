@@ -1,6 +1,7 @@
 import type { IDataObject } from 'n8n-workflow';
 
 import type { Answer, DecisionsResponse } from './api';
+import { isImageParts, toOpenAiMessages } from './image';
 
 function instructionsOf(question: IDataObject): string {
 	return typeof question.instructions === 'string' ? question.instructions : '';
@@ -73,15 +74,26 @@ function assertNamedQuestions(questions: IDataObject[]): void {
 	}
 }
 
-/** Turns the node's request body into OpenAI's Decisions request body */
-export function toOpenAiRequest(body: IDataObject): IDataObject {
-	const state = body.state;
+/** A text/image parts state becomes one user message; anything else stringifies,
+ * and message-shaped input stays forbidden. */
+function inputOf(state: unknown): IDataObject | string {
+	if (typeof state === 'string') {
+		return state;
+	}
+	if (isImageParts(state)) {
+		return toOpenAiMessages(state) as unknown as IDataObject;
+	}
 	if (isMessageArray(state) || looksLikeMessage(state)) {
 		throw new Error(
 			"'State' looks like OpenAI messages, which the node does not support. Send the content as text or JSON instead.",
 		);
 	}
-	const input = typeof state === 'string' ? state : JSON.stringify(state);
+	return JSON.stringify(state);
+}
+
+/** Turns the node's request body into OpenAI's Decisions request body */
+export function toOpenAiRequest(body: IDataObject): IDataObject {
+	const input = inputOf(body.state);
 	const questions = body.questions;
 	if (Array.isArray(questions)) {
 		assertNamedQuestions(questions as IDataObject[]);

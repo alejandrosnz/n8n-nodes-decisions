@@ -6,6 +6,78 @@ function baseBody(questions: unknown, state: unknown = 'I was charged twice for 
 	return { state, model: 'gpt-6-luna', questions };
 }
 
+const imageParts = [
+	'Inspect the product in this photo.',
+	{ type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } },
+];
+
+describe('toOpenAiRequest with an image state', () => {
+	it('sends a parts state as one user message with input_text and input_image', () => {
+		const result = toOpenAiRequest(baseBody({}, imageParts));
+		expect(result.input).toEqual([
+			{
+				role: 'user',
+				content: [
+					{ type: 'input_text', text: 'Inspect the product in this photo.' },
+					{ type: 'input_image', image_url: 'data:image/png;base64,AA==' },
+				],
+			},
+		]);
+		expect(result).not.toHaveProperty('state');
+	});
+
+	it('keeps a public URL as the input_image value', () => {
+		const state = [
+			'Inspect.',
+			{ type: 'image_url', image_url: { url: 'https://example.com/listing.png' } },
+		];
+		const result = toOpenAiRequest(baseBody({}, state));
+		expect(result.input).toEqual([
+			{
+				role: 'user',
+				content: [
+					{ type: 'input_text', text: 'Inspect.' },
+					{ type: 'input_image', image_url: 'https://example.com/listing.png' },
+				],
+			},
+		]);
+	});
+
+	it('still translates the questions beside the image', () => {
+		const result = toOpenAiRequest(
+			baseBody(
+				{
+					photo_matches_listing: {
+						type: 'noul',
+						instructions: 'Does the photo match?',
+						criteria: { true: 'Every item pictured matches', false: 'It does not' },
+					},
+				},
+				imageParts,
+			),
+		);
+		const [question] = result.questions as Array<{ instructions: string }>;
+		expect(question.instructions).toBe(
+			'Does the photo match?\n\nA yes means: Every item pictured matches\nA no means: It does not',
+		);
+	});
+
+	it('does not mistake the parts array for OpenAI messages', () => {
+		expect(() => toOpenAiRequest(baseBody({}, imageParts))).not.toThrow(
+			/'State' looks like OpenAI messages/,
+		);
+	});
+
+	it('still rejects a hand-pasted messages array beside the parts support', () => {
+		const state = [
+			{ role: 'user', content: [{ type: 'input_image', image_url: 'data:image/png;base64,AA==' }] },
+		];
+		expect(() => toOpenAiRequest(baseBody({}, state))).toThrow(
+			/'State' looks like OpenAI messages/,
+		);
+	});
+});
+
 describe('toOpenAiRequest', () => {
 	it('sends a text state as input and drops the state key', () => {
 		const result = toOpenAiRequest(baseBody({}));
