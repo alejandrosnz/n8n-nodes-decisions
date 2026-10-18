@@ -59,63 +59,17 @@ All the questions in a request are asked about the same state. The [State](https
 
 ### Sending an image (Text + Image)
 
-With **State Format** set to **Text + Image**, the node sends the **State** text and one image as a state of two parts, the shape [vision-capable Decisions models](https://docs.typesafe.ai/concepts/state) accept:
+With **State Format** set to **Text + Image**, the node evaluates text together with one image, for the vision-capable decision models — e.g. `perplexity/pplx-decider-flash-v1.2` on OpenRouter or `gpt-6-luna` with the OpenAI provider. Fill in the **State** text, then choose an **Image Source**:
 
-```json
-{
-  "model": "perplexity/pplx-decider-flash-v1.2",
-  "state": [
-    "Marketplace listing title: \"Organic Honeycrisp apples, 6 count\"\nThe attached image is the product photo the seller uploaded.",
-    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,…" } }
-  ],
-  "questions": {
-    "photo_matches_listing": {
-      "type": "noul",
-      "instructions": "Does the photo show exactly what the listing title describes?",
-      "criteria": {
-        "true": "Every item pictured matches the listed product and count.",
-        "false": "The photo shows other products, a different count, or items not in the title."
-      }
-    }
-  }
-}
-```
-
-**Image Source** sets where the image comes from:
-
-| Image Source | What is sent |
+| Image Source | What you provide |
 | --- | --- |
-| Binary Data | The file in **Binary Property** (default `data`), converted to a `data:<mime>;base64,…` URL |
-| Public URL | The **Image URL**, sent unchanged |
-| Base64 | The **Base64 Image** data (without the `data:` prefix), wrapped in a `data:<mime>;base64,…` URL |
+| Binary Data | An image in the output of the previous node. **Binary Property** (default `data`) points at it. |
+| Public URL | The image's **Image URL**, e.g. `https://example.com/listing.png` |
+| Base64 | The image's **Base64 Image** data, without the `data:` prefix |
 
-The supported formats are GIF, JPEG, PNG and WebP, detected from the image's own bytes first, then from **Filename**, then from the binary property's metadata, so a renamed file still works. An image above 20 MB, a format outside that list, base64 carrying a `data:` prefix, a URL that is not a plain `http://` or `https://` URL, and a blank **State** are errors. **Image Format** (shown for the Base64 source) overrides byte detection when it cannot decide.
+The supported formats are GIF, JPEG, PNG and WebP, detected from the image's own bytes so renamed files still work; images above 20 MB are refused. For the Base64 source, **Image Format** helps when detection cannot decide. With the OpenAI provider the node sends the parts in OpenAI's Decisions API shape for you.
 
-Text + Image is offered for both operations and all three question types. Models that read decisions from images currently answer Yes/No questions, e.g. `perplexity/pplx-decider-flash-v1.2` on OpenRouter; with the OpenAI provider, `gpt-6-luna`. The node still sends the model any typed question; a text-only model answers about the text part alone.
-
-With the OpenAI provider the node translates the same parts into the shape OpenAI's Decisions API expects: one user message whose content carries `input_text` and `input_image` parts, and the questions as typed OpenAI questions.
-
-```json
-{
-  "model": "gpt-6-luna",
-  "input": [
-    {
-      "role": "user",
-      "content": [
-        { "type": "input_text", "text": "Inspect the product in this photo." },
-        { "type": "input_image", "image_url": "data:image/png;base64,…" }
-      ]
-    }
-  ],
-  "questions": [
-    {
-      "type": "predicate",
-      "name": "visible_damage",
-      "instructions": "Does the product have visible damage, such as a crack, tear, or dent?"
-    }
-  ]
-}
-```
+Text + Image works with both operations and all three question types; the image-answering models today answer Yes/No (noul) questions. A text-only model answers about the text part alone. See [docs.typesafe.ai](https://docs.typesafe.ai) for the request shapes and each model's capabilities.
 
 ### Evaluate
 
