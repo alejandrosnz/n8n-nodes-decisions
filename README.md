@@ -53,8 +53,23 @@ Both operations send one request per input item. Each request includes the item'
 | Text | The **State** field, as plain text |
 | JSON | The **State** field, parsed as a JSON object or array |
 | Input Item | The incoming item's JSON |
+| Text + Image | The **State** field as text, then one image, as an array of two parts |
 
 All the questions in a request are asked about the same state. The [State](https://docs.typesafe.ai/concepts/state) page covers how to structure it.
+
+### Sending an image (Text + Image)
+
+With **State Format** set to **Text + Image**, the node evaluates text together with one image, for the vision-capable decision models — e.g. `perplexity/pplx-decider-flash-v1.2` on OpenRouter or `gpt-6-luna` with the OpenAI provider. Fill in the **State** text, then choose an **Image Source**:
+
+| Image Source | What you provide |
+| --- | --- |
+| Binary Data | An image in the output of the previous node. **Binary Property** (default `data`) points at it. |
+| Public URL | The image's **Image URL**, e.g. `https://example.com/listing.png` |
+| Base64 | The image's **Base64 Image** data, without the `data:` prefix |
+
+The supported formats are GIF, JPEG, PNG and WebP, detected from the image's own bytes so renamed files still work; images above 20 MB are refused. For the Base64 source, **Image Format** helps when detection cannot decide. With the OpenAI provider the node sends the parts in OpenAI's Decisions API shape for you.
+
+Text + Image works with both operations and all three question types; the image-answering models today answer Yes/No (noul) questions. A text-only model answers about the text part alone. See [docs.typesafe.ai](https://docs.typesafe.ai) for the request shapes and each model's capabilities.
 
 ### Evaluate
 

@@ -47,8 +47,10 @@ function createFunctions(
 	respond: (body: unknown) => unknown,
 	continueOnFail = false,
 	credentials: Record<string, unknown> = { provider: 'typesafe', apiKey: 'k', baseUrl: '' },
+	binaryBuffer?: Buffer,
 ) {
 	const request = vi.fn(async () => respond(undefined));
+	const pngBytes = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(11, 1)]);
 	return {
 		request,
 		functions: {
@@ -59,7 +61,10 @@ function createFunctions(
 			getNodeParameter: (name: string, _itemIndex: number, fallback?: unknown) => {
 				return name in parameters ? parameters[name] : fallback;
 			},
-			helpers: { httpRequestWithAuthentication: request },
+			helpers: {
+				httpRequestWithAuthentication: request,
+				getBinaryDataBuffer: async () => binaryBuffer ?? pngBytes,
+			},
 		} as unknown as IExecuteFunctions,
 	};
 }
@@ -1093,5 +1098,189 @@ describe('OpenAI', () => {
 			.catch((caught: unknown) => caught);
 		expect(error).toBeInstanceOf(NodeApiError);
 		expect((error as Error).message).toContain('Invalid API key');
+	});
+});
+
+describe('Image state (Text + Image)', () => {
+	const pngBase64 = Buffer.concat([
+		Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+		Buffer.alloc(11, 1),
+	]).toString('base64');
+	const imageItems: INodeExecutionData[] = [
+		{ json: { ticket: 1 }, binary: { data: { mimeType: 'image/png' } } },
+	];
+	const noulRouteParameters: Record<string, unknown> = {
+		...routeParameters,
+		routeQuestionType: 'noul',
+		routeTrueMeans: 'Damaged',
+		routeFalseMeans: 'Undamaged',
+		stateFormat: 'image',
+		stateText: 'Inspect the product in this photo.',
+	};
+
+	it('sends the text and a Binary Data image as state parts', async () => {
+		const { functions, request } = createFunctions(
+			noulRouteParameters,
+			imageItems,
+			() => ({
+				statusCode: 200,
+				body: { model: 'jev-1.13.0', answers: { route: { type: 'noul', noul: 0.9 } } },
+			}),
+			false,
+			{ provider: 'openrouter', apiKey: 'k' },
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		const body = (request.mock.calls[0] as unknown as [unknown, { body: unknown }])[1].body;
+		expect(body).toEqual({
+			state: [
+				'Inspect the product in this photo.',
+				{ type: 'image_url', image_url: { url: `data:image/png;base64,${pngBase64}` } },
+			],
+			model: 'jev-latest',
+			questions: {
+				route: {
+					type: 'noul',
+					instructions: 'Which department should handle this?',
+					criteria: { true: 'Damaged', false: 'Undamaged' },
+				},
+			},
+		});
+		expect(outputs[0][0].json).toMatchObject({ route: { noul: 0.9 }, model: 'jev-1.13.0' });
+	});
+
+	it('sends a Public URL image as its own part, without downloading it', async () => {
+		const { functions, request } = createFunctions(
+			{
+				...noulRouteParameters,
+				imageSource: 'url',
+				imageUrl: 'https://example.com/listing.png',
+			},
+			imageItems,
+			() => ({
+				statusCode: 200,
+				body: { model: 'jev-1.13.0', answers: { route: { type: 'noul', noul: 0.1 } } },
+			}),
+			false,
+			{ provider: 'openrouter', apiKey: 'k' },
+		);
+		await Decisions.prototype.execute.call(functions);
+
+		const body = (request.mock.calls[0] as unknown as [unknown, { body: unknown }])[1].body;
+		expect(body).toEqual({
+			state: [
+				'Inspect the product in this photo.',
+				{ type: 'image_url', image_url: { url: 'https://example.com/listing.png' } },
+			],
+			model: 'jev-latest',
+			questions: expect.anything(),
+		});
+	});
+
+	it('sends a Base64 image as a data URI part', async () => {
+		const { functions, request } = createFunctions(
+			{
+				...noulRouteParameters,
+				imageSource: 'base64',
+				imageBase64: pngBase64,
+			},
+			imageItems,
+			() => ({
+				statusCode: 200,
+				body: { model: 'jev-1.13.0', answers: { route: { type: 'noul', noul: 0.9 } } },
+			}),
+			false,
+			{ provider: 'openrouter', apiKey: 'k' },
+		);
+		await Decisions.prototype.execute.call(functions);
+
+		const body = (request.mock.calls[0] as unknown as [unknown, { body: unknown }])[1].body;
+		expect(body).toEqual({
+			state: [
+				'Inspect the product in this photo.',
+				{ type: 'image_url', image_url: { url: `data:image/png;base64,${pngBase64}` } },
+			],
+			model: 'jev-latest',
+			questions: expect.anything(),
+		});
+	});
+
+	it('reports a blank State against the item when continuing on fail', async () => {
+		const { functions } = createFunctions(
+			{ ...routeParameters, stateFormat: 'image', stateText: '   ' },
+			imageItems,
+			() => choiceResponse('billing', 0.9),
+			true,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		expect(outputs[2][0].json).toMatchObject({ ticket: 1, error: "'State' is empty" });
+	});
+
+	it('names the binary property that has no data', async () => {
+		const { functions } = createFunctions(
+			{ ...noulRouteParameters, binaryPropertyName: 'img' },
+			imageItems,
+			() => choiceResponse('billing', 0.9),
+			true,
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		// Noul v1 has no separate low-confidence output, so errors go to the last one
+		expect(outputs[1][0].json.error).toMatch(/The binary property 'img' has no data/);
+	});
+
+	it('sends OpenAI the parts as one user message', async () => {
+		const { functions, request } = createFunctions(
+			{
+				operation: 'evaluate',
+				model: 'gpt-6-luna',
+				stateFormat: 'image',
+				stateText: 'Inspect the product in this photo.',
+				questionsFormat: 'fields',
+				'questions.question': [
+					{
+						id: 'visible_damage',
+						instructions: 'Does the product have visible damage?',
+						type: 'noul',
+					},
+				],
+			},
+			imageItems,
+			() => ({
+				statusCode: 200,
+				body: {
+					answers: [{ type: 'predicate', name: 'visible_damage', probability: 0.9 }],
+				},
+			}),
+			false,
+			{ provider: 'openai', apiKey: 'k', baseUrl: '' },
+		);
+		const outputs = await Decisions.prototype.execute.call(functions);
+
+		const [, { body }] = request.mock.calls[0] as unknown as [unknown, { body: unknown }];
+		expect(body).toEqual({
+			model: 'gpt-6-luna',
+			input: [
+				{
+					role: 'user',
+					content: [
+						{ type: 'input_text', text: 'Inspect the product in this photo.' },
+						{ type: 'input_image', image_url: `data:image/png;base64,${pngBase64}` },
+					],
+				},
+			],
+			questions: [
+				{
+					type: 'predicate',
+					name: 'visible_damage',
+					instructions: 'Does the product have visible damage?',
+				},
+			],
+		});
+		expect(outputs[0][0].json).toMatchObject({
+			answers: { visible_damage: { probability: 0.9 } },
+			model: 'gpt-6-luna',
+		});
 	});
 });
