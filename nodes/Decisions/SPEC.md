@@ -218,9 +218,10 @@ value is an error.
 object. The value MUST parse to an object or array.
 
 **Text + Image** sends a state of two parts: the **State** text, then one
-image part `{ "type": "image_url", "image_url": { "url": … } }`, the state
-shape vision-capable decision models accept. The first element is a string:
-an expression that resolves the **State** to an object is sent as its
+image part `{ "type": "image_url", "image_url": { "url": … } }`, whose `url`
+is a `data:` URL carrying the image inline — the Decisions APIs accept a
+base64 data URL, not a URL to fetch on their own. The first element is a
+string: an expression that resolves the **State** to an object is sent as its
 `JSON.stringify` form, and a number or boolean as its string form. A blank
 value is an error.
 
@@ -230,7 +231,7 @@ value is an error.
 | Image Source | yes | always | Binary Data, Public URL or Base64. Default Binary Data. Not settable by expression. |
 | Binary Property | yes | Binary Data | The binary property that holds the image. Default `data`. |
 | Filename | no | Binary Data | Used to detect the image format when the binary property does not carry one. |
-| Image URL | yes | Public URL | The HTTP(S) URL of the image, sent unchanged. |
+| Image URL | yes | Public URL | The HTTP(S) URL of the image. The node downloads it and sends it inline. |
 | Base64 Image | yes | Base64 | The image's base64 data, without the `data:` prefix. |
 | Image Format | no | Base64 | Auto-Detect (default), GIF, JPEG, PNG or WebP. Not settable by expression. |
 
@@ -239,11 +240,15 @@ The image itself MUST be validated before the request is sent, reporting per
 
 1. The format MUST be one of GIF, JPEG, PNG or WebP. It is detected from the
    image's own bytes first, then from **Filename**, then from the binary
-   property's `mimeType`. A renamed file therefore still works.
+   property's `mimeType` or, for a Public URL, from the server's
+   `Content-Type`. A renamed file therefore still works.
 2. The image MUST be at most 20MB, and carry at least one byte of data.
 3. A missing or unreadable binary property, base64 that is not base64 or
    carries the `data:` prefix, a URL that is not a plain `http`/`https` URL,
    and an empty **State** are errors.
+4. A Public URL MUST download: an unreachable URL, a failed download, a
+   non-2xx answer, and an empty download are errors. The download honours
+   the **Timeout** option.
 
 Both state fields carry the same label. Only one is ever visible, so the user
 always sees a single field called **State**.

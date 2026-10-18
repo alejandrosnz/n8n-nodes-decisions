@@ -64,6 +64,11 @@ function createFunctions(
 			helpers: {
 				httpRequestWithAuthentication: request,
 				getBinaryDataBuffer: async () => binaryBuffer ?? pngBytes,
+				request: async () => ({
+					statusCode: 200,
+					headers: { 'content-type': 'image/jpeg' },
+					body: Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(11, 1)]),
+				}),
 			},
 		} as unknown as IExecuteFunctions,
 	};
@@ -1149,12 +1154,12 @@ describe('Image state (Text + Image)', () => {
 		expect(outputs[0][0].json).toMatchObject({ route: { noul: 0.9 }, model: 'jev-1.13.0' });
 	});
 
-	it('sends a Public URL image as its own part, without downloading it', async () => {
+	it('downloads a Public URL image and sends it inline', async () => {
 		const { functions, request } = createFunctions(
 			{
 				...noulRouteParameters,
 				imageSource: 'url',
-				imageUrl: 'https://example.com/listing.png',
+				imageUrl: 'https://live.staticflickr.com/7296/14086869112_28c8aef2f3_b.jpg',
 			},
 			imageItems,
 			() => ({
@@ -1166,11 +1171,15 @@ describe('Image state (Text + Image)', () => {
 		);
 		await Decisions.prototype.execute.call(functions);
 
-		const body = (request.mock.calls[0] as unknown as [unknown, { body: unknown }])[1].body;
-		expect(body).toEqual({
+		const [, options] = request.mock.calls[0] as unknown as [unknown, { body: unknown }];
+		const jpegBase64 = Buffer.concat([
+			Buffer.from([0xff, 0xd8, 0xff]),
+			Buffer.alloc(11, 1),
+		]).toString('base64');
+		expect(options.body).toEqual({
 			state: [
 				'Inspect the product in this photo.',
-				{ type: 'image_url', image_url: { url: 'https://example.com/listing.png' } },
+				{ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${jpegBase64}` } },
 			],
 			model: 'jev-latest',
 			questions: expect.anything(),

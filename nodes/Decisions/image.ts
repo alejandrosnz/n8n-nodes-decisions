@@ -1,4 +1,4 @@
-import type { IExecuteFunctions } from 'n8n-workflow';
+import type { IDataObject, IExecuteFunctions } from 'n8n-workflow';
 
 import { fail, type ItemContext } from './helpers';
 
@@ -38,14 +38,18 @@ export function detectMimeTypeFromExtension(filename: string): string | null {
 	return null;
 }
 
+export function detectMimeTypeFromBytes(bytes: Buffer): string | null {
+	for (const format of Object.values(SUPPORTED_IMAGE_FORMATS)) {
+		if (bytes.subarray(0, format.magicBytes.length).equals(Buffer.from(format.magicBytes))) {
+			return format.mimeType;
+		}
+	}
+	return null;
+}
+
 export function detectMimeTypeFromBase64(base64Data: string): string | null {
 	try {
-		const bytes = Buffer.from(base64Data, 'base64');
-		for (const format of Object.values(SUPPORTED_IMAGE_FORMATS)) {
-			if (bytes.subarray(0, format.magicBytes.length).equals(Buffer.from(format.magicBytes))) {
-				return format.mimeType;
-			}
-		}
+		return detectMimeTypeFromBytes(Buffer.from(base64Data, 'base64'));
 	} catch {
 		// Invalid base64 falls through to no detection
 	}
@@ -202,7 +206,31 @@ function fromBase64(functions: IExecuteFunctions, context: ItemContext): ImagePa
 	return imagePart(`data:${mimeType};base64,${base64Data}`);
 }
 
-function fromUrl(functions: IExecuteFunctions, context: ItemContext): ImagePart {
+function declareServerContentType(headerValue: unknown): string | null {
+	if (typeof headerValue !== 'string') {
+		return null;
+	}
+	const declared = headerValue.split(';')[0].trim();
+	return isUnknownFormat(declared) ? null : declared;
+}
+
+/** The download response as bytes, whatever shape the helper returned */
+function toBuffer(body: unknown): Buffer {
+	if (Buffer.isBuffer(body)) {
+		return body;
+	}
+	if (body instanceof ArrayBuffer) {
+		return Buffer.from(new Uint8Array(body));
+	}
+	if (typeof body === 'string') {
+		return Buffer.from(body, 'utf8');
+	}
+	return Buffer.alloc(0);
+}
+
+/** A Public URL image is downloaded and sent as its `data:` URL: the Decisions
+ * APIs accept inline data URLs, not a URL to fetch on their own. */
+async function fromUrl(functions: IExecuteFunctions, context: ItemContext): Promise<ImagePart> {
 	const { itemIndex } = context;
 	const url = ((functions.getNodeParameter('imageUrl', itemIndex, '') as string) ?? '').trim();
 	if (url === '') {
@@ -221,11 +249,48 @@ function fromUrl(functions: IExecuteFunctions, context: ItemContext): ImagePart 
 	if (lowered.includes('<script') || lowered.includes('javascript:')) {
 		fail(context, "'Image URL' contains script code", 'Use a plain HTTP(S) URL to the image.');
 	}
-	return imagePart(url);
+	const timeout = functions.getNodeParameter('options.timeout', itemIndex, 5000) as number;
+	let response: { statusCode?: number; headers?: IDataObject; body?: unknown };
+	try {
+		response = (await functions.helpers.request({
+			method: 'GET',
+			url,
+			// The body must arrive as raw bytes: the node detects the format from
+			// the image's own bytes
+			encoding: null,
+			simple: false,
+			resolveWithFullResponse: true,
+			timeout,
+		})) as { statusCode?: number; headers?: IDataObject; body?: unknown };
+	} catch (error) {
+		fail(
+			context,
+			`The image at '${url}' could not be downloaded`,
+			(error as Error).message,
+		);
+	}
+	const status = (response.statusCode ?? 0) as number;
+	if (status < 200 || status >= 300) {
+		fail(
+			context,
+			`The image at '${url}' could not be downloaded`,
+			`The server answered status ${status}.`,
+		);
+	}
+	const bytes = toBuffer(response.body);
+	rejectOutOfBandSize(context, bytes);
+	// Magic bytes are the most reliable signal; the server's own content-type
+	// only fills in when the bytes say nothing.
+	const mimeType =
+		detectMimeTypeFromBytes(bytes) ?? declareServerContentType(response.headers?.['content-type']);
+	if (isUnknownFormat(mimeType)) {
+		rejectUnsupported(context, mimeType ?? null);
+	}
+	return imagePart(`data:${mimeType};base64,${bytes.toString('base64')}`);
 }
 
-/** Reads the item's image parameters, validates the image and returns the part
- * to append to the state array. */
+/** Reads the item's image parameters, loads the image, validates it and
+ * returns the part to append to the state array. */
 export async function buildImagePart(
 	functions: IExecuteFunctions,
 	context: ItemContext,
