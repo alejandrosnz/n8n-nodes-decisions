@@ -47,7 +47,7 @@
     },
     {
       "parameters": {
-        "model": "typesafe/jev-1.13",
+        "model": "~typesafe/jev-latest",
         "stateText": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('State', ``, 'string') }}",
         "questions": {
           "question": [
@@ -193,7 +193,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "fbfd0451-71ae-4ff7-bfa1-ab6ea7cc8a4f",
+  "versionId": "77fcd438-f9de-4482-ab74-4552493ca2e5",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "ad60bc00ef372218dfa03c55129b4359826a8a6d6771e92e9468ffc9009f87f8"

@@ -1,0 +1,221 @@
+{
+  "name": "Decisions - Vision Test",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        -32
+      ],
+      "id": "cb149c55-e897-4c3a-8cdb-8098395c4967",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.sample_image }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        0,
+        64
+      ],
+      "id": "1223e106-0b3c-419b-a504-0de699c09a75",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0da1ec5b-dbca-41df-8cf0-842c7b8e0b66",
+              "name": "sample_image",
+              "value": "https://live.staticflickr.com/7296/14086869112_28c8aef2f3_b.jpg",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -224,
+        -32
+      ],
+      "id": "7d35b968-ced9-4e2b-9a48-8de85ab71aaf",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get binary data from input item\nconst binaryData = items[0].binary;\n\n// Get the binary field name (default 'data')\nconst binaryPropertyName = 'data'; // Change this if your binary has a different name\n\n// Verify that binary exists\nif (!binaryData || !binaryData[binaryPropertyName]) {\n  throw new Error('Binary data not found in the specified field');\n}\n\n// Get the buffer from binary\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryPropertyName);\n\n// Convert to base64\nconst base64String = buffer.toString('base64');\n\n// Return the result\nreturn [\n  {\n    json: {\n      base64: base64String,\n      mimeType: binaryData[binaryPropertyName].mimeType,\n      fileName: binaryData[binaryPropertyName].fileName\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        160
+      ],
+      "id": "b704fbfc-9af5-42fd-b782-ef8a70372623",
+      "name": "Binary to Base64"
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "~typesafe/jev-latest",
+        "stateFormat": "image",
+        "stateText": "The user uploaded the following image",
+        "imageSource": "url",
+        "imageUrl": "={{ $json.sample_image }}",
+        "routeQuestionType": "noul",
+        "routeInstructions": "Does this image contains a red apple?",
+        "routeTrueMeans": "yes",
+        "routeFalseMeans": "no",
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -128
+      ],
+      "id": "0605e74e-0a06-4f63-9698-95d14a8f4f3f",
+      "name": "Decisions - URL",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "~typesafe/jev-latest",
+        "stateFormat": "image",
+        "stateText": "The user uploaded the following image",
+        "routeQuestionType": "noul",
+        "routeInstructions": "Does this image contains a red apple?",
+        "routeTrueMeans": "yes",
+        "routeFalseMeans": "no",
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -32
+      ],
+      "id": "a928bcc1-b35a-4d1a-82aa-c0644f86369b",
+      "name": "Decisions - Binary",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "route",
+        "model": "~typesafe/jev-latest",
+        "stateFormat": "image",
+        "stateText": "The user uploaded the following image",
+        "imageSource": "base64",
+        "imageBase64": "={{ $json.base64 }}",
+        "routeQuestionType": "noul",
+        "routeInstructions": "Does this image contains a red apple?",
+        "routeTrueMeans": "yes",
+        "routeFalseMeans": "no",
+        "options": {}
+      },
+      "type": "n8n-nodes-decisions.decisions",
+      "typeVersion": 2,
+      "position": [
+        448,
+        160
+      ],
+      "id": "d0f76d5a-a8e4-4049-b50c-02b4f8df90f8",
+      "name": "Decisions - Base64",
+      "credentials": {
+        "decisionsApi": {
+          "id": "NKcAkE82ylCopGog",
+          "name": "Decisions account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Binary to Base64",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Decisions - Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Decisions - URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Binary to Base64": {
+      "main": [
+        [
+          {
+            "node": "Decisions - Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a6231647-c043-40ed-a3e7-fc06f1356c59",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ad60bc00ef372218dfa03c55129b4359826a8a6d6771e92e9468ffc9009f87f8"
+  },
+  "nodeGroups": [],
+  "id": "ZeLPHNIqXxNxfUmN",
+  "tags": []
+}

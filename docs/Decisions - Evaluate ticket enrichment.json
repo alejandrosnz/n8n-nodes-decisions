@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Six support tickets covering every branch. In production, replace with a Webhook / helpdesk trigger.\nconst tickets = [\n  { id: 'T-101', from: 'ana@pixelforge.io', subject: 'Double charge, last warning',\n    body: \"This is the third time you have double-charged me. If this isn't refunded by Friday I'm contacting my lawyer and filing a chargeback.\" },\n  { id: 'T-102', from: 'ops@brightcart.com', subject: 'Webhooks failing with 504',\n    body: 'Our webhook deliveries have been failing since 9am with 504 errors. We process orders through it, so we need this looked at ASAP.' },\n  { id: 'T-103', from: 'sam@greenleaf.co', subject: 'Export still broken',\n    body: \"The export feature has been broken for a week and I'm honestly getting annoyed. I'd like a refund for this month.\" },\n  { id: 'T-104', from: 'finance@oakridge.org', subject: 'Invoice email address',\n    body: 'Is it possible to change the email address our invoices are sent to? No rush at all.' },\n  { id: 'T-105', from: 'lena@studio-nine.dev', subject: 'Annual discount?',\n    body: 'Do you offer an annual discount for teams of 15 people?' },\n  { id: 'T-106', from: 'mark@unknown-co.com', subject: 'Re: Re: issue',\n    body: 'Same issue as before.' },\n];\nreturn tickets.map(t => ({ json: t }));"
+        "jsCode": "\n// Six support tickets covering every branch.\n// In production, replace this node with a Webhook or helpdesk trigger.\n\nconst tickets = [\n  {\n    id: 'T-101',\n    from: 'ana@pixelforge.io',\n    subject: 'Double charge, last warning',\n    body: \"This is the third time you have double-charged me. If this isn't refunded by Friday I'm contacting my lawyer and filing a chargeback.\",\n  },\n  {\n    id: 'T-102',\n    from: 'ops@brightcart.com',\n    subject: 'Webhooks failing with 504',\n    body: 'Our webhook deliveries have been failing since 9am with 504 errors. We process orders through it, so we need this looked at ASAP.',\n  },\n  {\n    id: 'T-103',\n    from: 'sam@greenleaf.co',\n    subject: 'Export still broken',\n    body: \"The export feature has been broken for a week and I'm honestly getting annoyed. I'd like a refund for this month.\",\n  },\n  {\n    id: 'T-104',\n    from: 'finance@oakridge.org',\n    subject: 'Invoice email address',\n    body: 'Is it possible to change the email address our invoices are sent to? No rush at all.',\n  },\n  {\n    id: 'T-105',\n    from: 'lena@studio-nine.dev',\n    subject: 'Annual discount?',\n    body: 'Do you offer an annual discount for teams of 15 people?',\n  },\n  {\n    id: 'T-106',\n    from: 'mark@unknown-co.com',\n    subject: 'Re: Re: issue',\n    body: 'Same issue as before.',\n  },\n];\n\n// Return one n8n item per ticket.\nreturn tickets.map((ticket) => ({\n  json: ticket,\n}));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -27,7 +27,7 @@
     },
     {
       "parameters": {
-        "model": "typesafe/jev-1.13",
+        "model": "~typesafe/jev-latest",
         "stateText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.body }}",
         "questions": {
           "question": [
@@ -113,7 +113,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Business rules live in code: the Evaluate node only reports signals + probabilities.\n// Tune these thresholds to your own tolerance.\nconst T = { urgent: 0.8, refund: 0.7, legal: 0.7, frustrated: 2, minConfidence: 0.6 };\n\nreturn $input.all().map(({ json }) => {\n  const a = json.answers || {};\n  const urgent     = a.is_urgent?.noul ?? 0;\n  const refund     = a.wants_refund?.noul ?? 0;\n  const legal      = a.legal_threat?.noul ?? 0;\n  const frustration = a.frustration?.score ?? 0;\n  const team       = a.team?.choice ?? 'unknown';\n  const lowConfidence = (a.team?.confidence ?? 0) < T.minConfidence\n                     || (a.frustration?.confidence ?? 0) < T.minConfidence;\n\n  const signals = [];\n  if (urgent >= T.urgent) signals.push('urgent');\n  if (frustration >= T.frustrated) signals.push('frustrated');\n  if (refund >= T.refund) signals.push('refund_request');\n  if (legal >= T.legal) signals.push('legal_threat');\n\n  let route = 'p3';\n  if (urgent >= T.urgent || frustration >= T.frustrated) route = 'p2';\n  if (urgent >= T.urgent && frustration >= T.frustrated) route = 'p1';\n  if (legal >= T.legal) route = 'legal';\n  else if (lowConfidence) route = 'review';\n\n  return { json: { ...json, team, signals, route, reason: route === 'review' ? 'low_confidence' : undefined } };\n});"
+        "jsCode": "\n// Business rules live in code: the Evaluate node only reports signals\n// and probabilities. Tune these thresholds to your own tolerance.\n\nconst T = {\n  urgent: 0.8,\n  refund: 0.7,\n  legal: 0.7,\n  frustrated: 2,\n  minConfidence: 0.6,\n};\n\nreturn $input.all().map(({ json }) => {\n  const a = json.answers || {};\n\n  const urgent = a.is_urgent?.noul ?? 0;\n  const refund = a.wants_refund?.noul ?? 0;\n  const legal = a.legal_threat?.noul ?? 0;\n  const frustration = a.frustration?.score ?? 0;\n  const team = a.team?.choice ?? 'unknown';\n\n  const lowConfidence =\n    (a.team?.confidence ?? 0) < T.minConfidence ||\n    (a.frustration?.confidence ?? 0) < T.minConfidence;\n\n  const signals = [];\n\n  if (urgent >= T.urgent) {\n    signals.push('urgent');\n  }\n\n  if (frustration >= T.frustrated) {\n    signals.push('frustrated');\n  }\n\n  if (refund >= T.refund) {\n    signals.push('refund_request');\n  }\n\n  if (legal >= T.legal) {\n    signals.push('legal_threat');\n  }\n\n  let route = 'p3';\n\n  if (urgent >= T.urgent || frustration >= T.frustrated) {\n    route = 'p2';\n  }\n\n  if (urgent >= T.urgent && frustration >= T.frustrated) {\n    route = 'p1';\n  }\n\n  if (legal >= T.legal) {\n    route = 'legal';\n  } else if (lowConfidence) {\n    route = 'review';\n  }\n\n  return {\n    json: {\n      ...json,\n      team,\n      signals,\n      route,\n      reason: route === 'review' ? 'low_confidence' : undefined,\n    },\n  };\n});\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -492,7 +492,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "e4c6f180-d736-40d9-9578-fa2a90c8d555",
+  "versionId": "2251d3aa-3a4d-4508-b6d7-f2a7225aa3a9",
   "meta": {
     "instanceId": "ad60bc00ef372218dfa03c55129b4359826a8a6d6771e92e9468ffc9009f87f8"
   },

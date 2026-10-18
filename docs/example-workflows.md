@@ -99,3 +99,21 @@ Try these three messages in the chat panel:
 3. `Do you offer an annual discount for teams of 15 people?` → normal sales answer.
 
 Good for: support chatbots and copilots that need a calibrated safety and priority check before the LLM drafts a word — guardrails with probabilities instead of a second black-box prompt.
+
+## 5. Vision test (Route on an image)
+
+A **Text + Image** workflow: three Route nodes ask the same question — does this photo contain a red apple? — once per **Image Source**, so you can see every way of feeding an image to the node and confirm your credential and vision-capable model answer with photos.
+
+![Vision test workflow: one sample URL fans out into three Text + Image Route nodes, one per image source — URL, binary and base64 — each asking whether the photo contains a red apple](./Decisions%20-%20Images%20(sample).png)
+
+- Workflow: [`Decisions - Images (sample).json`](./Decisions%20-%20Images%20(sample).json)
+- Nodes: 3 × Route with **State Format: Text + Image** (`Decisions - URL`, `Decisions - Binary`, `Decisions - Base64`)
+
+How it works:
+
+1. **Edit Fields** sets the photo's URL (a red apple, hosted on Flickr), and the **HTTP Request** node downloads it into the item's binary data.
+2. **Decisions - URL** sends the photo straight from its **Image URL**: the node downloads it itself and inlines it as base64.
+3. **Decisions - Binary** receives the downloaded photo as *Binary Data* — the source to use when the image is already in the item's binary output.
+4. **Binary to Base64** encodes it and **Decisions - Base64** sends that string — useful when an earlier step handed you the image already encoded.
+
+Each Route node answers the same noul question with two outputs (`yes`/`no`); all three should agree. The nodes ship with `~typesafe/jev-latest`: pick a **vision-capable** Decisions model in your provider, e.g. `perplexity/pplx-decider-flash-v1.2` (OpenRouter) or `gpt-6-luna` (OpenAI), and select your Decisions API credential. Today's image-answering Decisions models answer Yes/No (noul) questions.
