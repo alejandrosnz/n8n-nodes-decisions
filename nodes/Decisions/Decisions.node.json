@@ -33,6 +33,8 @@
 		"probability",
 		"confidence",
 		"openai",
-		"predicate"
+		"predicate",
+		"image",
+		"vision"
 	]
 }

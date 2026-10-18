@@ -152,7 +152,8 @@ the node panel and search. This node is an ordinary transform node.
 `alias` MUST be populated; it drives discoverability:
 `decisions`, `typesafe`, `jev`, `classify`, `classification`, `route`,
 `routing`, `triage`, `guardrail`, `moderation`, `score`, `rank`, `extract`,
-`system one`, `probability`, `confidence`.
+`system one`, `probability`, `confidence`, `openai`, `predicate`, `image`,
+`vision`.
 
 ---
 
@@ -206,6 +207,7 @@ Required, both operations. A plain text model ID, for example `jev-latest`.
 | Text | The content of the **State** field. |
 | JSON | The parsed content of the **State** field, as an object or array. |
 | Input Item | The incoming item's JSON, unchanged. |
+| Text + Image | The **State** field as text, then one image, as an array of two parts. |
 
 **State** — shown for Text. Required, multi-line. If an expression resolves it
 to an object, that object MUST be sent as structured state rather than
@@ -214,6 +216,34 @@ value is an error.
 
 **State** — shown for JSON. Required, JSON editor, defaulting to a minimal
 object. The value MUST parse to an object or array.
+
+**Text + Image** sends a state of two parts: the **State** text, then one
+image part `{ "type": "image_url", "image_url": { "url": … } }`, the state
+shape vision-capable decision models accept. The first element is a string:
+an expression that resolves the **State** to an object is sent as its
+`JSON.stringify` form, and a number or boolean as its string form. A blank
+value is an error.
+
+| Label | Required | Shown when | Meaning |
+| --- | --- | --- | --- |
+| State | yes | always | The text sent alongside the image. |
+| Image Source | yes | always | Binary Data, Public URL or Base64. Default Binary Data. Not settable by expression. |
+| Binary Property | yes | Binary Data | The binary property that holds the image. Default `data`. |
+| Filename | no | Binary Data | Used to detect the image format when the binary property does not carry one. |
+| Image URL | yes | Public URL | The HTTP(S) URL of the image, sent unchanged. |
+| Base64 Image | yes | Base64 | The image's base64 data, without the `data:` prefix. |
+| Image Format | no | Base64 | Auto-Detect (default), GIF, JPEG, PNG or WebP. Not settable by expression. |
+
+The image itself MUST be validated before the request is sent, reporting per
+§7 against the item:
+
+1. The format MUST be one of GIF, JPEG, PNG or WebP. It is detected from the
+   image's own bytes first, then from **Filename**, then from the binary
+   property's `mimeType`. A renamed file therefore still works.
+2. The image MUST be at most 20MB, and carry at least one byte of data.
+3. A missing or unreadable binary property, base64 that is not base64 or
+   carries the `data:` prefix, a URL that is not a plain `http`/`https` URL,
+   and an empty **State** are errors.
 
 Both state fields carry the same label. Only one is ever visible, so the user
 always sees a single field called **State**.
@@ -359,6 +389,9 @@ One request per input item, to `POST {host}{endpoint path}`, carrying exactly
 default when the credential's **Endpoint Path** is blank, otherwise the entered
 path as normalized there.
 
+When State Format is Text + Image, `state` is the two-part array of §5.3. The
+other State Formats send a scalar or structured `state` as before.
+
 ### 6.1 Questions for Evaluate
 
 Each configured question becomes one entry in the `questions` map, keyed by its
@@ -399,6 +432,7 @@ the response back:
 | --- | --- |
 | `state` as text | `input`, unchanged |
 | `state` as an object or array | `input`, `JSON.stringify` of the state |
+| Text + Image state | `input`, an array of one user message whose `content` carries an `input_text` part with the text, then an `input_image` part whose `image_url` is the part's URL directly, as a string |
 | `questions` map keyed by ID | `questions` array, each entry carrying its ID as `name`, in the same order |
 | Noul question | `predicate` question; the given `true`/`false` meanings are appended to `instructions` as `"\n\nA yes means: <true>"` and/or `"\nA no means: <false>"`, only for the meanings given (a lone `false` meaning uses `"\n\nA no means: <false>"`; with neither meaning the instructions are unchanged) |
 | Choice question | `choice` question; the criteria map becomes `choices: [{ value, description }]`, omitting `description` where none was given |
@@ -408,10 +442,11 @@ A **Using Raw JSON** value that is already an array of OpenAI questions is
 sent unchanged, but every entry needs a unique non-blank `name`: missing
 or duplicated names are an error before the request is sent.
 
-There is no image support: a state that looks like OpenAI messages, as one
-message or an array of them, is an error; any other object or array state
-is sent as its `JSON.stringify` form. A converted question with empty
-instructions is an error.
+A state that looks like OpenAI messages, as one message or an array of
+them, is an error. A Text + Image state becomes the one-message `input`
+described above instead. Any other object or array state is sent as its
+`JSON.stringify` form. A converted question with empty instructions is an
+error.
 
 ---
 

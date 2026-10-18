@@ -53,8 +53,69 @@ Both operations send one request per input item. Each request includes the item'
 | Text | The **State** field, as plain text |
 | JSON | The **State** field, parsed as a JSON object or array |
 | Input Item | The incoming item's JSON |
+| Text + Image | The **State** field as text, then one image, as an array of two parts |
 
 All the questions in a request are asked about the same state. The [State](https://docs.typesafe.ai/concepts/state) page covers how to structure it.
+
+### Sending an image (Text + Image)
+
+With **State Format** set to **Text + Image**, the node sends the **State** text and one image as a state of two parts, the shape [vision-capable Decisions models](https://docs.typesafe.ai/concepts/state) accept:
+
+```json
+{
+  "model": "perplexity/pplx-decider-flash-v1.2",
+  "state": [
+    "Marketplace listing title: \"Organic Honeycrisp apples, 6 count\"\nThe attached image is the product photo the seller uploaded.",
+    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,…" } }
+  ],
+  "questions": {
+    "photo_matches_listing": {
+      "type": "noul",
+      "instructions": "Does the photo show exactly what the listing title describes?",
+      "criteria": {
+        "true": "Every item pictured matches the listed product and count.",
+        "false": "The photo shows other products, a different count, or items not in the title."
+      }
+    }
+  }
+}
+```
+
+**Image Source** sets where the image comes from:
+
+| Image Source | What is sent |
+| --- | --- |
+| Binary Data | The file in **Binary Property** (default `data`), converted to a `data:<mime>;base64,…` URL |
+| Public URL | The **Image URL**, sent unchanged |
+| Base64 | The **Base64 Image** data (without the `data:` prefix), wrapped in a `data:<mime>;base64,…` URL |
+
+The supported formats are GIF, JPEG, PNG and WebP, detected from the image's own bytes first, then from **Filename**, then from the binary property's metadata, so a renamed file still works. An image above 20 MB, a format outside that list, base64 carrying a `data:` prefix, a URL that is not a plain `http://` or `https://` URL, and a blank **State** are errors. **Image Format** (shown for the Base64 source) overrides byte detection when it cannot decide.
+
+Text + Image is offered for both operations and all three question types. Models that read decisions from images currently answer Yes/No questions, e.g. `perplexity/pplx-decider-flash-v1.2` on OpenRouter; with the OpenAI provider, `gpt-6-luna`. The node still sends the model any typed question; a text-only model answers about the text part alone.
+
+With the OpenAI provider the node translates the same parts into the shape OpenAI's Decisions API expects: one user message whose content carries `input_text` and `input_image` parts, and the questions as typed OpenAI questions.
+
+```json
+{
+  "model": "gpt-6-luna",
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "input_text", "text": "Inspect the product in this photo." },
+        { "type": "input_image", "image_url": "data:image/png;base64,…" }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "type": "predicate",
+      "name": "visible_damage",
+      "instructions": "Does the product have visible damage, such as a crack, tear, or dent?"
+    }
+  ]
+}
+```
 
 ### Evaluate
 
