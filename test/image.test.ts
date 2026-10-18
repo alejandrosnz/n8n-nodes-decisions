@@ -33,10 +33,23 @@ function base64Of(magic: number[]): string {
 
 type Parameters = Record<string, unknown>;
 
+interface HttpResponse {
+	statusCode?: number;
+	headers?: Record<string, unknown>;
+	body?: unknown;
+}
+
+const defaultHttpResponse = (): HttpResponse => ({
+	statusCode: 200,
+	headers: { 'content-type': 'image/jpeg' },
+	body: imageBytes([0xff, 0xd8, 0xff]),
+});
+
 function createFunctions(
 	parameters: Parameters = {},
 	buffer: Buffer | Error | undefined = imageBytes([0x89, 0x50, 0x4e, 0x47]),
 	binaryProperties: Record<string, unknown> = { data: { mimeType: 'image/png', fileName: undefined } },
+	httpResponse: HttpResponse | Error = defaultHttpResponse(),
 ) {
 	return {
 		getNode: () => node,
@@ -49,6 +62,12 @@ function createFunctions(
 					throw buffer;
 				}
 				return buffer;
+			},
+			request: async () => {
+				if (httpResponse instanceof Error) {
+					throw httpResponse;
+				}
+				return httpResponse;
 			},
 		},
 	} as unknown as IExecuteFunctions;
@@ -252,14 +271,86 @@ describe('buildImagePart from base64', () => {
 });
 
 describe('buildImagePart from URL', () => {
-	it('returns the URL part unchanged', async () => {
-		const functions = createFunctions({ imageSource: 'url', imageUrl: 'https://example.com/a.png' });
+	const urlParameters = { imageSource: 'url', imageUrl: 'https://example.com/a.jpg' };
+
+	it('downloads the image and sends it as a data URI part', async () => {
+		const jpegBytes = imageBytes([0xff, 0xd8, 0xff]);
+		const functions = createFunctions(urlParameters, undefined, undefined, {
+			statusCode: 200,
+			headers: { 'content-type': 'image/jpeg; charset=binary' },
+			body: jpegBytes,
+		});
 		const part = await buildImagePart(functions, context);
 
 		expect(part).toEqual({
 			type: 'image_url',
-			image_url: { url: 'https://example.com/a.png' },
+			image_url: { url: `data:image/jpeg;base64,${jpegBytes.toString('base64')}` },
 		});
+	});
+
+	it('detects the format from the bytes when the content-type is silent', async () => {
+		const functions = createFunctions(urlParameters, undefined, undefined, {
+			statusCode: 200,
+			headers: { 'content-type': 'application/octet-stream' },
+			body: imageBytes([0x89, 0x50, 0x4e, 0x47]),
+		});
+		const part = await buildImagePart(functions, context);
+
+		expect(part.image_url.url).toContain('data:image/png;base64,');
+	});
+
+	it('rejects a download that fails', async () => {
+		const functions = createFunctions(
+			urlParameters,
+			undefined,
+			undefined,
+			new Error('ENOTFOUND example.com'),
+		);
+		await expect(buildImagePart(functions, context)).rejects.toThrow(
+			/The image at 'https:\/\/example\.com\/a\.jpg' could not be downloaded/,
+		);
+	});
+
+	it('rejects a non-2xx answer', async () => {
+		const functions = createFunctions(urlParameters, undefined, undefined, {
+			statusCode: 404,
+			body: imageBytes([0xff, 0xd8, 0xff]),
+		});
+		await expect(buildImagePart(functions, context)).rejects.toMatchObject({
+			message: "The image at 'https://example.com/a.jpg' could not be downloaded",
+			description: expect.stringContaining('status 404'),
+		} as Partial<NodeOperationError>);
+	});
+
+	it('rejects an empty download', async () => {
+		const functions = createFunctions(urlParameters, undefined, undefined, {
+			statusCode: 200,
+			headers: { 'content-type': 'image/jpeg' },
+			body: Buffer.alloc(0),
+		});
+		await expect(buildImagePart(functions, context)).rejects.toThrow(/The image is empty/);
+	});
+
+	it('rejects downloaded bytes in an unsupported format', async () => {
+		const functions = createFunctions(urlParameters, undefined, undefined, {
+			statusCode: 200,
+			headers: { 'content-type': 'image/bmp' },
+			body: Buffer.from('x', 'utf8'),
+		});
+		await expect(buildImagePart(functions, context)).rejects.toThrow(
+			/The image format could not be detected/,
+		);
+	});
+
+	it('rejects a download over the 20MB limit', async () => {
+		const functions = createFunctions(urlParameters, undefined, undefined, {
+			statusCode: 200,
+			headers: { 'content-type': 'image/jpeg' },
+			body: Buffer.alloc(21 * 1024 * 1024, 7),
+		});
+		await expect(buildImagePart(functions, context)).rejects.toThrow(
+			/The image is 21.00MB, above the 20MB limit/,
+		);
 	});
 
 	it.each([
@@ -267,7 +358,7 @@ describe('buildImagePart from URL', () => {
 		['javascript:alert(1)', /'Image URL' must start with http/],
 		['not a url', /is not a valid URL/],
 		['', /'Image URL' is empty/],
-	])('rejects %s', async (imageUrl, message) => {
+	])('rejects %s without downloading', async (imageUrl, message) => {
 		const functions = createFunctions({ imageSource: 'url', imageUrl });
 		await expect(buildImagePart(functions, context)).rejects.toThrow(
 			message as unknown as RegExp,

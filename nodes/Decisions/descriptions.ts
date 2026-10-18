@@ -329,7 +329,7 @@ export const decisionsProperties: INodeProperties[] = [
 		default: '',
 		placeholder: 'e.g. https://example.com/listing.png',
 		displayOptions: { show: { stateFormat: ['image'], imageSource: ['url'] } },
-		description: 'The HTTP(S) URL of the image',
+		description: 'The HTTP(S) URL of the image, downloaded by the node and sent inline',
 	},
 	{
 		displayName: 'Base64 Image',

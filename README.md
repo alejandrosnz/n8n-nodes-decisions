@@ -64,10 +64,10 @@ With **State Format** set to **Text + Image**, the node evaluates text together 
 | Image Source | What you provide |
 | --- | --- |
 | Binary Data | An image in the output of the previous node. **Binary Property** (default `data`) points at it. |
-| Public URL | The image's **Image URL**, e.g. `https://example.com/listing.png` |
+| Public URL | The image's **Image URL**, e.g. `https://example.com/listing.png`. The node downloads it and sends it inline. |
 | Base64 | The image's **Base64 Image** data, without the `data:` prefix |
 
-The supported formats are GIF, JPEG, PNG and WebP, detected from the image's own bytes so renamed files still work; images above 20 MB are refused. For the Base64 source, **Image Format** helps when detection cannot decide. With the OpenAI provider the node sends the parts in OpenAI's Decisions API shape for you.
+The supported formats are GIF, JPEG, PNG and WebP, detected from the image's own bytes so renamed files still work; images above 20 MB are refused. For the Base64 source, **Image Format** helps when detection cannot decide. A URL that fails to download or answers with an error status, base64 carrying a `data:` prefix, and a URL that is not a plain `http://` or `https://` URL are all errors. With the OpenAI provider the node sends the parts in OpenAI's Decisions API shape for you.
 
 Text + Image works with both operations and all three question types; the image-answering models today answer Yes/No (noul) questions. A text-only model answers about the text part alone. See [docs.typesafe.ai](https://docs.typesafe.ai) for the request shapes and each model's capabilities.
 
